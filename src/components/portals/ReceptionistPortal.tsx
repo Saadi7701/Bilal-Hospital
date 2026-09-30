@@ -32,6 +32,7 @@ import {
   CashTransactionRecord,
 } from "../../lib/mockDataStore";
 import { HospitalFormsManager } from "../forms/HospitalFormsManager";
+import { PatientFileManager } from "./PatientFileManager";
 
 interface ReceptionistPortalProps {
   activeTab: string;
@@ -851,6 +852,11 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       {/* VIEW: HOSPITAL FORMS */}
       {activeTab === "hospital_forms" && (
         <HospitalFormsManager patients={patients} />
+      )}
+
+      {/* VIEW: PATIENT FILE ARCHIVE */}
+      {activeTab === "patient_archive" && (
+        <PatientFileManager />
       )}
 
       {/* Modal: Register Patient Profile */}

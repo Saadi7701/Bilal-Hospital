@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
+import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
 
 export async function GET(req: Request) {
   try {
@@ -31,6 +32,38 @@ export async function POST(req: Request) {
     }
 
     const form = await hospitalFormsRepository.createDoctorNote(body);
+
+    // ── Phase 5: Auto-archive Doctor Note ──
+    if (form?.patient && body.admissionFormNumber) {
+      patientFileArchiveService
+        .onDoctorNoteCreated({
+          patient: {
+            id: form.patient.id,
+            mrNumber: form.patient.mrNumber,
+            cnic: form.patient.cnic,
+            fullName: form.patient.fullName,
+            gender: form.patient.gender,
+            age: form.patient.age,
+            phone: form.patient.phone,
+          },
+          admissionFormNumber: body.admissionFormNumber,
+          visitId: form.visitId ?? undefined,
+          noteId: form.id,
+          formNumber: form.formNumber,
+          noteData: {
+            formNumber: form.formNumber,
+            noteDate: form.noteDate,
+            noteTime: form.noteTime,
+            doctorName: form.doctorName,
+            notes: form.notes,
+          },
+          createdById: body.createdById,
+        })
+        .catch((err: any) =>
+          console.error("[Archive] Doctor Note archive error (non-fatal):", err?.message)
+        );
+    }
+
     return NextResponse.json({ message: "Doctor note created successfully", form }, { status: 201 });
   } catch (error: any) {
     console.error("[Doctor Note POST Error]:", error);
@@ -40,3 +73,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

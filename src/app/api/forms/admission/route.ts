@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
+import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
 
 export async function GET(req: Request) {
   try {
@@ -30,6 +31,39 @@ export async function POST(req: Request) {
     }
 
     const form = await hospitalFormsRepository.createAdmissionForm(body);
+
+    // ── Phase 4: Auto-create patient file directory + archive admission form ──
+    // This is non-blocking: archive failure does not roll back the DB record.
+    if (form?.patient) {
+      patientFileArchiveService
+        .onAdmissionCreated({
+          patient: {
+            id: form.patient.id,
+            mrNumber: form.patient.mrNumber,
+            cnic: form.patient.cnic,
+            fullName: form.patient.fullName,
+            gender: form.patient.gender,
+            age: form.patient.age,
+            phone: form.patient.phone,
+          },
+          admissionFormNumber: form.formNumber,
+          visitId: form.visitId ?? undefined,
+          formData: {
+            formNumber: form.formNumber,
+            dateOfAdmission: form.dateOfAdmission,
+            provisionalDiagnosis: form.provisionalDiagnosis,
+            wardName: body.wardName,
+            bedNumber: body.bedNumber,
+            admittedThrough: form.admittedThrough,
+            consultantName: body.consultantName,
+          },
+          createdById: body.createdById,
+        })
+        .catch((err: any) =>
+          console.error("[Archive] Admission archive error (non-fatal):", err?.message)
+        );
+    }
+
     return NextResponse.json({ message: "Admission form created successfully", form }, { status: 201 });
   } catch (error: any) {
     console.error("[Admission Form POST Error]:", error);
@@ -39,3 +73,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

@@ -41,6 +41,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Misc
-.cache/
-.parcel-cache/
+# Local Patient Archive Storage
+storage/
+storage/patient-files/
+

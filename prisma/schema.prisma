@@ -30,6 +30,7 @@ model User {
   admissionForms    AdmissionForm[]
   operationNotes    OperationNote[]
   doctorNotes       DoctorNote[]
+  createdPatientDocuments PatientDocument[] @relation("PatientDocumentCreator")
 }
 
 model Consultant {
@@ -86,6 +87,7 @@ model Patient {
   admissionForms   AdmissionForm[]
   operationNotes   OperationNote[]
   doctorNotes      DoctorNote[]
+  patientDocuments PatientDocument[]
 }
 
 model PatientVisit {
@@ -125,6 +127,7 @@ model PatientVisit {
   admissionForms   AdmissionForm[]
   operationNotes   OperationNote[]
   doctorNotes      DoctorNote[]
+  patientDocuments PatientDocument[]
 }
 
 model Consultation {
@@ -751,3 +754,62 @@ model DoctorNote {
   updatedAt   DateTime @updatedAt
 }
 
+// ─────────────────────────────────────────────────────────────────
+// LOCAL ELECTRONIC PATIENT FILE / DOCUMENT ARCHIVE
+// ─────────────────────────────────────────────────────────────────
+
+model PatientDocument {
+  id           String   @id @default(uuid())
+
+  // Patient relationship (required)
+  patientId    String
+  patient      Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  // Visit/Admission relationship (optional – not every document is visit-scoped)
+  visitId      String?
+  visit        PatientVisit? @relation(fields: [visitId], references: [id])
+
+  // The AdmissionForm formNumber that controls the admissions/<ADM-ID>/ subfolder
+  // Must match the AdmissionForm.formNumber used at admission time
+  admissionFormNumber String?
+
+  // Document classification
+  documentType String   // ADMISSION | DOCTOR_NOTE | PRESCRIPTION | LABORATORY | ULTRASOUND | OPERATION | REFERRAL | DISCHARGE | OTHER
+
+  // Human-readable label shown in Patient File viewer (e.g. "Blood CBC Report – 2026-09-30")
+  documentName String
+
+  // Relative path from PATIENT_FILES_ROOT – used to reconstruct the full path on download
+  // e.g. "35202-1234567-1/admissions/ADM-001/laboratory/lab-LAB-001-2026-09-30.json"
+  relativePath String
+
+  // File metadata
+  fileName     String
+  mimeType     String   @default("application/pdf")
+  fileSize     Int      @default(0)  // bytes
+
+  // SHA-256 checksum for integrity verification
+  checksum     String?
+
+  // Archive state
+  // PENDING  – document queued but not yet written
+  // ARCHIVED – file written and database record created
+  // VERIFIED – checksum verified post-write
+  // ERROR    – write or verification failed
+  status       String   @default("ARCHIVED")
+
+  // Error detail (populated only when status = ERROR)
+  errorMessage String?
+
+  // Audit
+  createdById  String?
+  createdBy    User?    @relation("PatientDocumentCreator", fields: [createdById], references: [id])
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([patientId])
+  @@index([visitId])
+  @@index([admissionFormNumber])
+  @@index([documentType])
+  @@index([status])
+}

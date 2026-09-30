@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
+import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
 
 export async function GET(req: Request) {
   try {
@@ -30,6 +31,39 @@ export async function POST(req: Request) {
     }
 
     const form = await hospitalFormsRepository.createDischargeForm(body);
+
+    // ── Phase 5: Auto-archive Discharge Form ──
+    if (form?.patient && body.admissionFormNumber) {
+      patientFileArchiveService
+        .onDischargeFormCreated({
+          patient: {
+            id: form.patient.id,
+            mrNumber: form.patient.mrNumber,
+            cnic: form.patient.cnic,
+            fullName: form.patient.fullName,
+            gender: form.patient.gender,
+            age: form.patient.age,
+            phone: form.patient.phone,
+          },
+          admissionFormNumber: body.admissionFormNumber,
+          visitId: form.visitId ?? undefined,
+          formNumber: form.formNumber,
+          dischargeData: {
+            formNumber: form.formNumber,
+            formDate: form.formDate,
+            dischargeDate: form.dischargeDate,
+            diagnosis: form.diagnosis,
+            dischargeCondition: form.dischargeCondition,
+            doctorName: form.doctorName,
+            outcome: form.outcome,
+          },
+          createdById: body.createdById,
+        })
+        .catch((err: any) =>
+          console.error("[Archive] Discharge archive error (non-fatal):", err?.message)
+        );
+    }
+
     return NextResponse.json({ message: "Discharge form created successfully", form }, { status: 201 });
   } catch (error: any) {
     console.error("[Discharge Form POST Error]:", error);
@@ -39,3 +73,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

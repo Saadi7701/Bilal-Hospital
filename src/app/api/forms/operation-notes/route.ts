@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
+import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
 
 export async function GET(req: Request) {
   try {
@@ -30,6 +31,40 @@ export async function POST(req: Request) {
     }
 
     const form = await hospitalFormsRepository.createOperationNote(body);
+
+    // ── Phase 5: Auto-archive Operation Note ──
+    if (form?.patient && body.admissionFormNumber) {
+      patientFileArchiveService
+        .onOperationNoteCreated({
+          patient: {
+            id: form.patient.id,
+            mrNumber: form.patient.mrNumber,
+            cnic: form.patient.cnic,
+            fullName: form.patient.fullName,
+            gender: form.patient.gender,
+            age: form.patient.age,
+            phone: form.patient.phone,
+          },
+          admissionFormNumber: body.admissionFormNumber,
+          visitId: form.visitId ?? undefined,
+          formNumber: form.formNumber,
+          operationData: {
+            formNumber: form.formNumber,
+            operationDate: form.operationDate,
+            surgeonName: form.surgeonName,
+            anesthetistName: form.anesthetistName,
+            anesthesiaType: form.anesthesiaType,
+            findings: form.findings,
+            procedureDetails: form.procedureDetails,
+            conditionAtEnd: form.conditionAtEnd,
+          },
+          createdById: body.createdById,
+        })
+        .catch((err: any) =>
+          console.error("[Archive] Operation Note archive error (non-fatal):", err?.message)
+        );
+    }
+
     return NextResponse.json({ message: "Operation note created successfully", form }, { status: 201 });
   } catch (error: any) {
     console.error("[Operation Note POST Error]:", error);
@@ -39,3 +74,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

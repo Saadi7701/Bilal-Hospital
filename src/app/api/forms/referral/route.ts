@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
+import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
 
 export async function GET(req: Request) {
   try {
@@ -30,6 +31,38 @@ export async function POST(req: Request) {
     }
 
     const form = await hospitalFormsRepository.createReferralForm(body);
+
+    // ── Phase 5: Auto-archive Referral Form ──
+    if (form?.patient && body.admissionFormNumber) {
+      patientFileArchiveService
+        .onReferralFormCreated({
+          patient: {
+            id: form.patient.id,
+            mrNumber: form.patient.mrNumber,
+            cnic: form.patient.cnic,
+            fullName: form.patient.fullName,
+            gender: form.patient.gender,
+            age: form.patient.age,
+            phone: form.patient.phone,
+          },
+          admissionFormNumber: body.admissionFormNumber,
+          visitId: form.visitId ?? undefined,
+          formNumber: form.formNumber,
+          referralData: {
+            formNumber: form.formNumber,
+            formDate: form.formDate,
+            referredHospitalName: form.referredHospitalName,
+            provisionalDiagnosis: form.provisionalDiagnosis,
+            reasonForReferral: form.reasonForReferral,
+            doctorName: form.doctorName,
+          },
+          createdById: body.createdById,
+        })
+        .catch((err: any) =>
+          console.error("[Archive] Referral archive error (non-fatal):", err?.message)
+        );
+    }
+
     return NextResponse.json({ message: "Referral form created successfully", form }, { status: 201 });
   } catch (error: any) {
     console.error("[Referral Form POST Error]:", error);
@@ -39,3 +72,4 @@ export async function POST(req: Request) {
     );
   }
 }
+

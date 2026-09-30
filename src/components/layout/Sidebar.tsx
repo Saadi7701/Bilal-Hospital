@@ -26,6 +26,7 @@ import {
   TrendingUp,
   TrendingDown,
   CheckCircle2,
+  Folder,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -59,6 +60,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "new_visit", label: "New Encounter & Fee", icon: Calendar },
           { id: "ot_gyne_reg", label: "OT & Gyne Admission", icon: Bed },
           { id: "hospital_forms", label: "Hospital Forms", icon: FileText },
+          { id: "patient_archive", label: "Patient Files / Archive", icon: Folder },
         ];
       case "CONSULTANT":
         return [
@@ -67,6 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "doctor_notes", label: "Doctor Notes", icon: FileText },
           { id: "lab_requests", label: "Diagnostic Requests Queue", icon: TestTube },
           { id: "report_review", label: "Lab & Scan Reports Inbox", icon: FileSpreadsheet },
+          { id: "patient_archive", label: "Patient Files / Archive", icon: Folder },
         ];
       case "LABORATORY":
         return [

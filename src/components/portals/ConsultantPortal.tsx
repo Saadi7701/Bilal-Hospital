@@ -31,6 +31,7 @@ import {
   ConsultantUser,
 } from '@/lib/mockDataStore';
 import { DoctorNotesManager } from '../forms/DoctorNotesManager';
+import { PatientFileManager } from './PatientFileManager';
 
 const mockMedicines = [
   'Tab. Panadol 500mg',
@@ -1052,6 +1053,8 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
           </div>
         ) : currentTab === 'doctor_notes' ? (
           <DoctorNotesManager doctorName={consultantName} visits={visits} />
+        ) : currentTab === 'patient_archive' ? (
+          <PatientFileManager />
         ) : null}
       </div>
 

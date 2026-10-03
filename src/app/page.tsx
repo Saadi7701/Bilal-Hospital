@@ -211,9 +211,19 @@ export default function Home() {
   };
 
   const handleAcceptLabReport = async (labOrderId: string) => {
+    const targetOrder = labOrders.find((l) => l.id === labOrderId);
     setLabOrders(
       labOrders.map((l) => (l.id === labOrderId ? { ...l, status: "ACCEPTED" } : l))
     );
+    if (targetOrder) {
+      setVisits((prev) =>
+        prev.map((v) =>
+          (v.id === targetOrder.visitId || v.mrNumber === targetOrder.mrNumber)
+            ? { ...v, status: "CHECKED" }
+            : v
+        )
+      );
+    }
     await fetch("/api/lab-orders", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
@@ -246,6 +256,27 @@ export default function Home() {
     imageBase64?: string
   ) => {
     try {
+      const targetOrder = labOrders.find((l) => l.id === labOrderId);
+      const newStatus = isVersion2 ? "ACCEPTED" : "REPORT_PREPARED";
+
+      setLabOrders((prev) =>
+        prev.map((l) =>
+          l.id === labOrderId
+            ? { ...l, status: newStatus, resultsV1: resultsJson, attachedPdfName: pdfFileName || l.attachedPdfName }
+            : l
+        )
+      );
+
+      if (targetOrder) {
+        setVisits((prev) =>
+          prev.map((v) =>
+            (v.id === targetOrder.visitId || v.mrNumber === targetOrder.mrNumber) && v.status === "LAB_REQUESTED"
+              ? { ...v, status: "COMPLETED" }
+              : v
+          )
+        );
+      }
+
       await fetch("/api/lab-orders", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },

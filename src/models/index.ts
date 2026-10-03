@@ -19,3 +19,5 @@ export * from "./CashTransaction";
 export * from "./DailyCashClosing";
 export * from "./AuditLog";
 export * from "./SystemHealthRecord";
+export * from "./LabTestTemplate";
+

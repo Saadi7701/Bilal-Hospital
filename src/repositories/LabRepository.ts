@@ -3,7 +3,7 @@ import { prisma } from "../lib/prisma";
 export class LabRepository {
   async createLabOrder(orderData: any): Promise<any> {
     let patientId = orderData.patientId ? orderData.patientId.toString() : "";
-    let visitId = orderData.visitId ? orderData.visitId.toString() : "";
+    let visitId: string | null = orderData.visitId ? orderData.visitId.toString() : null;
     let consultantId = orderData.consultantId ? orderData.consultantId.toString() : "";
 
     const patientObj = await prisma.patient.findFirst({
@@ -11,10 +11,13 @@ export class LabRepository {
     });
     if (patientObj) patientId = patientObj.id;
 
-    const visitObj = await prisma.patientVisit.findFirst({
-      where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
-    });
-    if (visitObj) visitId = visitObj.id;
+    if (visitId) {
+      const visitObj = await prisma.patientVisit.findFirst({
+        where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
+      });
+      // If the visitId can't be resolved to a real DB record, store null to avoid FK constraint failure
+      visitId = visitObj ? visitObj.id : null;
+    }
 
     const consultantObj = await prisma.consultant.findFirst({
       where: { OR: [{ id: consultantId }, { legacyId: consultantId }] },
@@ -40,7 +43,7 @@ export class LabRepository {
         patientId,
         patientName: orderData.patientName || (patientObj ? patientObj.fullName : "Patient"),
         mrNumber: orderData.mrNumber || (patientObj ? patientObj.mrNumber : "MR-0000"),
-        visitId,
+        ...(visitId ? { visitId } : {}),
         consultantId,
         consultantName: orderData.consultantName || "Doctor",
         testCategory: orderData.testCategory || "General Pathology",
@@ -58,6 +61,7 @@ export class LabRepository {
 
     return { ...order, _id: order.id };
   }
+
 
   async findOrdersByPatient(patientId: string): Promise<any[]> {
     const patientObj = await prisma.patient.findFirst({

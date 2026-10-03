@@ -101,6 +101,28 @@ export class PatientRepository {
     });
     return { ...patient, _id: patient.id };
   }
+
+  async findDuplicates(params: { cnic?: string; phone?: string; fullName?: string }): Promise<any[]> {
+    const conditions: any[] = [];
+    if (params.cnic && params.cnic.trim().length > 4) {
+      conditions.push({ cnic: params.cnic.trim() });
+    }
+    if (params.phone && params.phone.trim().length > 4) {
+      conditions.push({ phone: params.phone.trim() });
+    }
+    if (params.fullName && params.fullName.trim().length > 2) {
+      conditions.push({ fullName: { contains: params.fullName.trim(), mode: "insensitive" } });
+    }
+
+    if (conditions.length === 0) return [];
+
+    const matches = await prisma.patient.findMany({
+      where: { OR: conditions },
+      take: 10,
+    });
+    return matches.map((p) => ({ ...p, _id: p.id }));
+  }
 }
 
 export const patientRepository = new PatientRepository();
+

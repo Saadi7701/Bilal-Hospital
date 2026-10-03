@@ -79,6 +79,8 @@ export async function connectToProductionDatabase(): Promise<typeof mongoose> {
   return cached.conn;
 }
 
+export const connectToDatabase = connectToProductionDatabase;
+
 /**
  * Graceful shutdown hook to safely close connection pools on application termination.
  */

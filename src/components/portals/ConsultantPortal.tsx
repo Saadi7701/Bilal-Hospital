@@ -19,6 +19,11 @@ import {
   Lock,
   Shield,
   Key,
+  RotateCcw,
+  ThumbsUp,
+  AlertCircle,
+  Microscope,
+  RefreshCw,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/Badge';
 import { Modal } from '@/components/ui/Modal';
@@ -32,6 +37,8 @@ import {
 } from '@/lib/mockDataStore';
 import { DoctorNotesManager } from '../forms/DoctorNotesManager';
 import { PatientFileManager } from './PatientFileManager';
+import { getTemplateByCode, DEFAULT_LAB_TEMPLATES } from '@/lib/labTemplateRegistry';
+import { labTemplateEngine } from '@/lib/labTemplateEngine';
 
 const mockMedicines = [
   'Tab. Panadol 500mg',
@@ -59,6 +66,228 @@ interface ConsultantPortalProps {
   onConsultantLogout?: (consultantId: string) => void;
 }
 
+// ── Inline Lab Report Viewer component ───────────────────────────────────────
+const LabReportInlineViewer: React.FC<{
+  order: LabOrderRecord;
+  onAccept: () => void;
+  onRevise: (reason: string, comment: string) => void;
+  onClose: () => void;
+}> = ({ order, onAccept, onRevise, onClose }) => {
+  const [revisionReason, setRevisionReason] = useState('');
+  const [revisionComment, setRevisionComment] = useState('');
+  const [showReviseForm, setShowReviseForm] = useState(false);
+
+  const isAlreadyAccepted = order.status === 'ACCEPTED';
+  const isRevisionRequested = order.status === 'REVISION_REQUESTED';
+  const hasReport = !!order.resultsV1 || !!order.resultsV2;
+
+  // Resolve template and evaluate results
+  const testCode = order.tests && order.tests[0] ? order.tests[0] : 'CBC';
+  const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
+
+  let parsedResults: Record<string, string> = {};
+  const rawResults = order.resultsV2 || order.resultsV1 || '';
+  try {
+    parsedResults = rawResults ? JSON.parse(rawResults) : {};
+  } catch {
+    parsedResults = {};
+  }
+
+  const evaluated = hasReport ? labTemplateEngine.evaluateAllResults(tmpl, parsedResults) : [];
+  const abnormalCount = evaluated.filter((r) => r.flag !== 'NORMAL').length;
+
+  return (
+    <div className="space-y-4 text-xs">
+      {/* Report Header */}
+      <div className="flex items-center justify-between p-4 rounded-xl bg-gradient-to-r from-slate-900 to-amber-950 border border-amber-800/40 text-white">
+        <div>
+          <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 mb-0.5">Bilal Hospital Laboratory Report</div>
+          <div className="text-base font-black">{tmpl.name}</div>
+          <div className="text-[11px] text-slate-300 mt-0.5">Order: {order.orderNumber} | Sample: {tmpl.sampleType}</div>
+        </div>
+        <div className="text-right space-y-1">
+          <Badge variant={isAlreadyAccepted ? 'success' : isRevisionRequested ? 'danger' : 'warning'}>
+            {order.status}
+          </Badge>
+          {order.currentVersion > 1 && (
+            <div className="text-[10px] text-amber-300 font-mono">Version {order.currentVersion}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Patient Demographics Strip */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-3 rounded-xl bg-amber-50/60 dark:bg-slate-800/60 border border-amber-200 dark:border-slate-700">
+        <div>
+          <div className="text-[10px] font-bold text-slate-400 uppercase">Patient</div>
+          <div className="font-bold text-slate-900 dark:text-white">{order.patientName}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold text-slate-400 uppercase">Permanent MRN</div>
+          <div className="font-mono font-bold text-amber-600">{order.mrNumber}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold text-slate-400 uppercase">Consultant</div>
+          <div className="font-semibold">{order.consultantName}</div>
+        </div>
+        <div>
+          <div className="text-[10px] font-bold text-slate-400 uppercase">Priority</div>
+          <Badge variant={order.priority === 'URGENT' ? 'danger' : 'neutral'}>{order.priority}</Badge>
+        </div>
+      </div>
+
+      {/* Abnormal Alert */}
+      {abnormalCount > 0 && (
+        <div className="flex items-center gap-2 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-700 dark:text-rose-400">
+          <AlertCircle className="w-4 h-4 flex-shrink-0" />
+          <span className="font-bold">{abnormalCount} parameter{abnormalCount > 1 ? 's' : ''} outside reference range — review required.</span>
+        </div>
+      )}
+
+      {/* Results Table */}
+      {hasReport ? (
+        <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-900 text-white text-[10px] font-bold uppercase">
+                <th className="py-2.5 px-3">Test Parameter</th>
+                <th className="py-2.5 px-3">Result</th>
+                <th className="py-2.5 px-3">Unit</th>
+                <th className="py-2.5 px-3">Ref. Range</th>
+                <th className="py-2.5 px-3">Flag</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+              {evaluated.map((r, i) => (
+                <tr key={i} className={r.flag !== 'NORMAL' ? 'bg-rose-50 dark:bg-rose-950/30' : 'hover:bg-slate-50 dark:hover:bg-slate-800/40'}>
+                  <td className="py-2 px-3 font-medium text-slate-800 dark:text-slate-200">
+                    {r.section && <span className="text-[9px] text-slate-400 font-mono block">[{r.section}]</span>}
+                    {r.name}
+                  </td>
+                  <td className={`py-2 px-3 font-mono font-bold ${r.flag !== 'NORMAL' ? 'text-rose-600 dark:text-rose-400' : 'text-slate-900 dark:text-white'}`}>
+                    {r.value || '—'}
+                  </td>
+                  <td className="py-2 px-3 text-slate-500 font-mono">{r.unit || '—'}</td>
+                  <td className="py-2 px-3 text-slate-500 font-mono text-[10px]">{r.referenceRange || 'Normal'}</td>
+                  <td className="py-2 px-3">
+                    {r.flag !== 'NORMAL' ? (
+                      <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-rose-500 text-white uppercase">{r.flag}</span>
+                    ) : (
+                      <span className="text-emerald-500 font-bold text-[10px]">✓ Normal</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div className="py-8 text-center text-slate-400 border border-dashed rounded-xl">
+          <Microscope className="w-8 h-8 mx-auto mb-2 text-slate-300" />
+          <div className="font-bold">Report not yet submitted by laboratory.</div>
+          <div className="text-[11px] mt-1">Status: {order.status}</div>
+        </div>
+      )}
+
+      {/* PDF File Info */}
+      {order.attachedPdfName && (
+        <div className="flex items-center gap-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 dark:text-emerald-400">
+          <FileText className="w-4 h-4 flex-shrink-0" />
+          <span className="font-mono font-bold text-[11px]">{order.attachedPdfName}</span>
+          <span className="text-[10px] text-slate-400 ml-auto">Stored in patient MRN local file</span>
+        </div>
+      )}
+
+      {/* Revision Note (if already requested) */}
+      {isRevisionRequested && order.revisionReason && (
+        <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-xs space-y-1">
+          <div className="font-bold text-rose-700 dark:text-rose-400">⚠ Revision Already Requested</div>
+          <div className="text-slate-700 dark:text-slate-300"><span className="font-bold">Reason:</span> {order.revisionReason}</div>
+          {order.revisionComment && <div className="text-slate-600 dark:text-slate-400">{order.revisionComment}</div>}
+        </div>
+      )}
+
+      {/* Action Buttons */}
+      <div className="border-t pt-4 space-y-3">
+        {!showReviseForm ? (
+          <div className="flex flex-wrap gap-3 justify-between items-center">
+            <button onClick={onClose} className="px-4 py-2 rounded-xl border border-slate-300 font-bold text-slate-600 hover:bg-slate-50 transition-colors">
+              Close
+            </button>
+            <div className="flex gap-3">
+              {!isRevisionRequested && !isAlreadyAccepted && (
+                <button
+                  onClick={() => setShowReviseForm(true)}
+                  className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold flex items-center gap-2 shadow-sm transition-all"
+                >
+                  <RotateCcw className="w-4 h-4" /> Request Revision
+                </button>
+              )}
+              {!isAlreadyAccepted && hasReport && (
+                <button
+                  onClick={onAccept}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold flex items-center gap-2 shadow-lg shadow-emerald-600/30 transition-all"
+                >
+                  <ThumbsUp className="w-4 h-4" /> Accept Report
+                </button>
+              )}
+              {isAlreadyAccepted && (
+                <div className="flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 font-bold">
+                  <CheckCircle2 className="w-4 h-4" /> Report Accepted
+                </div>
+              )}
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-3 p-4 bg-rose-50 dark:bg-rose-950/20 rounded-xl border border-rose-200 dark:border-rose-900/40">
+            <div className="font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+              <RotateCcw className="w-4 h-4" /> Request Lab Revision / Correction
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] uppercase">Revision Reason *</label>
+              <select
+                value={revisionReason}
+                onChange={(e) => setRevisionReason(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-rose-300 font-bold text-xs"
+              >
+                <option value="">Select Reason...</option>
+                <option value="Sample hemolysis/lipemia suspected">Sample hemolysis / lipemia suspected</option>
+                <option value="Values inconsistent with clinical picture">Values inconsistent with clinical picture</option>
+                <option value="Wrong patient sample suspected">Wrong patient sample suspected — verify MRN</option>
+                <option value="Delta check failed">Delta check failed (significant change from prior)</option>
+                <option value="Incomplete panel">Incomplete panel — some parameters missing</option>
+                <option value="Transcription error suspected">Transcription / data entry error suspected</option>
+                <option value="Re-run required">Re-run required on fresh sample</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1 text-[11px] uppercase">Clinical Comment</label>
+              <textarea
+                rows={2}
+                placeholder="Additional clinical notes for the laboratory technician..."
+                value={revisionComment}
+                onChange={(e) => setRevisionComment(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border text-xs"
+              />
+            </div>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setShowReviseForm(false)} className="px-4 py-2 rounded-xl border font-bold text-xs text-slate-600">
+                Cancel
+              </button>
+              <button
+                disabled={!revisionReason}
+                onClick={() => { if (revisionReason) { onRevise(revisionReason, revisionComment); setShowReviseForm(false); } }}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-xs flex items-center gap-2"
+              >
+                <Send className="w-3.5 h-3.5" /> Submit Revision Request
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 
 type RxItem = PrescriptionRecord['items'][0];
 
@@ -82,9 +311,12 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
   onUpdateVisitStatus,
   onAddLabOrder,
   onAddUltrasoundOrder,
+  onAcceptLabReport,
+  onRequestLabRevision,
   onConsultantLogin,
   onConsultantLogout,
 }) => {
+  const [reviewingLabOrder, setReviewingLabOrder] = useState<LabOrderRecord | null>(null);
   // Use the global auth session to identify which consultant is viewing this portal.
   // Falls back to 'doc-1' for legacy compatibility when sessionUser is not provided.
   const [loggedInConsultantId, setLoggedInConsultantId] = useState<string | null>(
@@ -190,27 +422,42 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
 
   // 3. Diagnostic Requests Queue (LAB_REQUESTED, ULTRASOUND_REQUESTED)
   const diagnosticRequestVisits = visits.filter(
-    (v) => isConsultantForVisit(v) && (v.status === "LAB_REQUESTED" || v.status === "ULTRASOUND_REQUESTED")
+    (v) =>
+      isConsultantForVisit(v) &&
+      (v.status === "LAB_REQUESTED" || v.status === "ULTRASOUND_REQUESTED")
   );
 
   const consultantLabOrders = labOrders.filter((l) => {
+    if (sessionUser?.consultantDbId && l.consultantId === sessionUser.consultantDbId) return true;
     const isDoc1Match =
       selectedConsultant === "doc-1" &&
       (l.consultantId === "doc-1" ||
+        !l.consultantId ||
         l.consultantName?.toLowerCase().includes("bilal") ||
-        !l.consultantId);
+        l.consultantName?.toLowerCase().includes("doctor") ||
+        l.consultantName === "Consultant Doctor");
     const isDoc2Match =
       selectedConsultant === "doc-2" &&
       (l.consultantId === "doc-2" || l.consultantName?.toLowerCase().includes("sarah"));
-    return isDoc1Match || isDoc2Match || l.consultantId === selectedConsultant;
+    const isNameMatch =
+      sessionUser?.fullName &&
+      l.consultantName?.toLowerCase().includes(sessionUser.fullName.toLowerCase().split(' ').slice(-1)[0]);
+    return isDoc1Match || isDoc2Match || l.consultantId === selectedConsultant || Boolean(isNameMatch);
   });
 
+  const labResultsReadyOrders = consultantLabOrders.filter(
+    (l) => l.status === "REPORT_PREPARED" || l.status === "SUBMITTED_TO_CONSULTANT"
+  );
+
   const consultantUltrasoundOrders = ultrasoundOrders.filter((u) => {
+    if (sessionUser?.consultantDbId && u.consultantId === sessionUser.consultantDbId) return true;
     const isDoc1Match =
       selectedConsultant === "doc-1" &&
       (u.consultantId === "doc-1" ||
+        !u.consultantId ||
         u.consultantName?.toLowerCase().includes("bilal") ||
-        !u.consultantId);
+        u.consultantName?.toLowerCase().includes("doctor") ||
+        u.consultantName === "Consultant Doctor");
     const isDoc2Match =
       selectedConsultant === "doc-2" &&
       (u.consultantId === "doc-2" || u.consultantName?.toLowerCase().includes("sarah"));
@@ -251,7 +498,27 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
   const handleMarkCheckedOnly = () => {
     if (!activeVisit) return;
     onUpdateVisitStatus(activeVisit.id, 'CHECKED');
-    alert(`Patient ${activeVisit.patientName} marked as CHECKED / COMPLETED! Moved to Daily Checked Patients Queue.`);
+    alert(`Patient ${activeVisit.patientName} marked as CHECKED! Moved to Daily Checked Patients Queue.`);
+    setActiveVisit(null);
+  };
+
+  const handleCompleteEncounter = async () => {
+    if (!activeVisit) return;
+    try {
+      await fetch('/api/encounters', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: activeVisit.id,
+          status: 'COMPLETED',
+          performedBy: activeConsultantObj?.fullName || 'Doctor',
+        }),
+      });
+    } catch (err) {
+      console.warn('Encounter complete sync error:', err);
+    }
+    onUpdateVisitStatus(activeVisit.id, 'COMPLETED');
+    alert(`Encounter for ${activeVisit.patientName} (${activeVisit.mrNumber}) finalized & completed successfully!`);
     setActiveVisit(null);
   };
 
@@ -531,6 +798,21 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
           </button>
 
           <button
+            onClick={() => setInternalTab('lab_results_ready')}
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
+              currentTab === 'lab_results_ready'
+                ? 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-800 shadow-sm'
+                : 'text-slate-500 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }`}
+          >
+            <AlertCircle className="w-4 h-4 text-amber-500 animate-pulse" />
+            <span>Lab Results Ready</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] bg-amber-500/20 text-amber-600 dark:text-amber-400 font-bold">
+              {labResultsReadyOrders.length}
+            </span>
+          </button>
+
+          <button
             onClick={() => setInternalTab('doctor_notes')}
             className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all ${
               currentTab === 'doctor_notes'
@@ -588,6 +870,12 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    onClick={handleCompleteEncounter}
+                    className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-2 shadow-sm"
+                  >
+                    <CheckCircle2 className="w-4 h-4" /> Complete Encounter
+                  </button>
                   <button
                     onClick={handleMarkCheckedOnly}
                     className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold flex items-center gap-2"
@@ -929,127 +1217,400 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                       </td>
                     </tr>
                   ) : (
-                    diagnosticRequestVisits.map((visit) => (
-                      <tr key={visit.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                        <td className="py-4 px-6 font-mono font-bold text-amber-600">{visit.visitNumber}</td>
-                        <td className="py-4 px-6">
-                          <div className="font-bold text-slate-900 dark:text-white">{visit.patientName}</div>
-                          <div className="text-xs text-slate-500 font-mono mt-0.5">MR: {visit.mrNumber}</div>
-                        </td>
-                        <td className="py-4 px-6">
-                          {visit.status === 'LAB_REQUESTED' ? (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold">
-                              <TestTube className="w-3.5 h-3.5" /> Laboratory Test
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-bold">
-                              <Radio className="w-3.5 h-3.5" /> Ultrasound Scan
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-4 px-6">
-                          <Badge variant="warning">
-                            {visit.status === 'LAB_REQUESTED' ? 'Lab Pending' : 'Ultrasound Pending'}
-                          </Badge>
-                        </td>
-                        <td className="py-4 px-6 text-right">
-                          <button
-                            onClick={() => setActiveVisit(visit)}
-                            className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow-sm inline-flex items-center gap-1.5"
-                          >
-                            <Eye className="w-3.5 h-3.5" /> Open Encounter
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    diagnosticRequestVisits.map((visit) => {
+                      const matchingLabOrder = labOrders.find(
+                        (l) => (l.visitId && l.visitId === visit.id) || l.mrNumber === visit.mrNumber
+                      );
+                      const isLabDelivered =
+                        visit.status === 'COMPLETED' ||
+                        (matchingLabOrder &&
+                          (matchingLabOrder.status === 'REPORT_PREPARED' ||
+                            matchingLabOrder.status === 'SUBMITTED_TO_CONSULTANT' ||
+                            matchingLabOrder.status === 'ACCEPTED'));
+
+                      return (
+                        <tr key={visit.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                          <td className="py-4 px-6 font-mono font-bold text-amber-600">{visit.visitNumber}</td>
+                          <td className="py-4 px-6">
+                            <div className="font-bold text-slate-900 dark:text-white">{visit.patientName}</div>
+                            <div className="text-xs text-slate-500 font-mono mt-0.5">MR: {visit.mrNumber}</div>
+                          </td>
+                          <td className="py-4 px-6">
+                            {visit.status.startsWith('LAB') || matchingLabOrder ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 text-xs font-bold">
+                                <TestTube className="w-3.5 h-3.5" /> Laboratory Test
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs font-bold">
+                                <Radio className="w-3.5 h-3.5" /> Ultrasound Scan
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-4 px-6">
+                            {isLabDelivered ? (
+                              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 animate-pulse" /> Report Delivered
+                              </span>
+                            ) : (
+                              <Badge variant="warning">
+                                {visit.status === 'LAB_REQUESTED' ? 'Lab Pending' : 'Ultrasound Pending'}
+                              </Badge>
+                            )}
+                          </td>
+                          <td className="py-4 px-6 text-right">
+                            <div className="flex items-center justify-end gap-2">
+                              {isLabDelivered && matchingLabOrder ? (
+                                <button
+                                  onClick={() => {
+                                    setReviewingLabOrder(matchingLabOrder);
+                                    setInternalTab('report_review');
+                                  }}
+                                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm inline-flex items-center gap-1.5"
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> Review Delivered Report
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setActiveVisit(visit)}
+                                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold shadow-sm inline-flex items-center gap-1.5"
+                                >
+                                  <Eye className="w-3.5 h-3.5" /> Open Encounter
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
             </div>
           </div>
+        ) : currentTab === 'lab_results_ready' ? (
+          /* ── 4. LAB RESULTS READY — Continue Encounter ── */
+          <div className="space-y-4">
+            {/* Header Banner */}
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-amber-900/40 via-slate-900 to-slate-900 border border-amber-600/30 flex items-center justify-between">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-2 mb-1">
+                  <AlertCircle className="w-3.5 h-3.5 animate-pulse" /> Lab Results Ready · Action Required
+                </div>
+                <h3 className="text-base font-black text-white">
+                  {labResultsReadyOrders.length} Patient{labResultsReadyOrders.length !== 1 ? 's' : ''} Awaiting Consultation
+                </h3>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Lab reports have been delivered. Review results and continue the encounter to prescribe.
+                </p>
+              </div>
+              <div className="w-12 h-12 rounded-2xl bg-amber-500/20 border border-amber-500/30 flex items-center justify-center">
+                <Microscope className="w-6 h-6 text-amber-400" />
+              </div>
+            </div>
+
+            {labResultsReadyOrders.length === 0 ? (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center">
+                <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-4">
+                  <CheckCircle2 className="w-7 h-7 text-emerald-500" />
+                </div>
+                <div className="font-bold text-slate-600 dark:text-slate-400 text-sm">All lab results reviewed</div>
+                <div className="text-xs text-slate-400 mt-1">No patients are waiting for result-based follow-up.</div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {labResultsReadyOrders.map((lab) => {
+                  // Find the associated visit for this lab order
+                  const assocVisit = visits.find(
+                    (v) => (lab.visitId && v.id === lab.visitId) || v.mrNumber === lab.mrNumber
+                  );
+
+                  // Parse and evaluate results
+                  const testCode = lab.tests && lab.tests[0] ? lab.tests[0] : 'CBC';
+                  const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
+                  let parsedResults: Record<string, string> = {};
+                  const rawResults = lab.resultsV2 || lab.resultsV1 || '';
+                  try { parsedResults = rawResults ? JSON.parse(rawResults) : {}; } catch { parsedResults = {}; }
+                  const evaluated = labTemplateEngine.evaluateAllResults(tmpl, parsedResults);
+                  const abnormals = evaluated.filter((r) => r.flag !== 'NORMAL');
+                  const criticals = evaluated.filter((r) => r.flag === 'CRITICAL');
+
+                  return (
+                    <div
+                      key={lab.id}
+                      className={`bg-white dark:bg-slate-900 border rounded-2xl overflow-hidden shadow-sm transition-all ${
+                        criticals.length > 0
+                          ? 'border-rose-400/60 dark:border-rose-600/40'
+                          : abnormals.length > 0
+                          ? 'border-amber-400/60 dark:border-amber-600/40'
+                          : 'border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      {/* Card Header */}
+                      <div className="p-4 flex items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800">
+                        <div className="flex items-center gap-3">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 ${
+                            criticals.length > 0 ? 'bg-rose-100 dark:bg-rose-900/30' :
+                            abnormals.length > 0 ? 'bg-amber-100 dark:bg-amber-900/30' :
+                            'bg-emerald-100 dark:bg-emerald-900/30'
+                          }`}>
+                            <Microscope className={`w-5 h-5 ${
+                              criticals.length > 0 ? 'text-rose-600' :
+                              abnormals.length > 0 ? 'text-amber-600' :
+                              'text-emerald-600'
+                            }`} />
+                          </div>
+                          <div>
+                            <div className="font-black text-slate-900 dark:text-white text-sm">{lab.patientName}</div>
+                            <div className="text-[11px] text-slate-500 font-mono">MR: {lab.mrNumber} · Order: {lab.orderNumber}</div>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          {criticals.length > 0 && (
+                            <span className="px-2.5 py-1 rounded-lg bg-rose-500/10 border border-rose-500/30 text-rose-600 text-[11px] font-bold flex items-center gap-1">
+                              <AlertCircle className="w-3 h-3" /> {criticals.length} Critical
+                            </span>
+                          )}
+                          {abnormals.length > 0 && (
+                            <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 border border-amber-500/30 text-amber-600 text-[11px] font-bold">
+                              {abnormals.length} Abnormal
+                            </span>
+                          )}
+                          {abnormals.length === 0 && (
+                            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 text-[11px] font-bold">
+                              All Normal
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tests Summary */}
+                      <div className="px-4 py-3 bg-slate-50/60 dark:bg-slate-800/30">
+                        <div className="text-[10px] font-bold uppercase text-slate-400 mb-2 tracking-wider">
+                          Test: {lab.tests.join(', ')}
+                        </div>
+                        {evaluated.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {evaluated.slice(0, 8).map((row) => (
+                              <div
+                                key={row.parameterId}
+                                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-bold border ${
+                                  row.flag === 'CRITICAL'
+                                    ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300'
+                                    : row.flag === 'HIGH' || row.flag === 'LOW' || row.flag === 'ABNORMAL'
+                                    ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-300 dark:border-amber-700 text-amber-700 dark:text-amber-300'
+                                    : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
+                                }`}
+                              >
+                                <span className="font-normal text-[10px] opacity-70">{row.parameterId}:</span>
+                                <span>{row.value || '—'}</span>
+                                {row.flag !== 'NORMAL' && (
+                                  <span className="text-[9px]">
+                                    {row.flag === 'CRITICAL' ? '‼' : row.flag === 'HIGH' ? '↑' : row.flag === 'LOW' ? '↓' : '!'}
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                            {evaluated.length > 8 && (
+                              <div className="px-2.5 py-1 rounded-lg text-[11px] text-slate-400 border border-dashed border-slate-300">
+                                +{evaluated.length - 8} more
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="text-xs text-slate-400 italic">
+                            {rawResults ? 'Results recorded (free-text format)' : 'Report attached — open encounter to review'}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Action Footer */}
+                      <div className="px-4 py-3 flex items-center justify-between gap-3 flex-wrap">
+                        <div className="text-[11px] text-slate-500">
+                          {assocVisit ? (
+                            <>Visit: <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{assocVisit.visitNumber}</span> · Status: <span className={`font-bold ${assocVisit.status === 'LAB_REQUESTED' ? 'text-amber-600' : 'text-blue-600'}`}>{assocVisit.status}</span></>
+                          ) : (
+                            <span className="text-slate-400 italic">Visit not in current queue</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => setReviewingLabOrder(lab)}
+                            className="px-3 py-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 text-[11px] font-bold inline-flex items-center gap-1.5 transition-colors"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Full Report
+                          </button>
+                          {assocVisit && (
+                            <button
+                              onClick={() => {
+                                setActiveVisit(assocVisit);
+                              }}
+                              className={`px-4 py-1.5 rounded-lg text-white text-[11px] font-bold inline-flex items-center gap-1.5 shadow-sm transition-all ${
+                                criticals.length > 0
+                                  ? 'bg-rose-600 hover:bg-rose-500 shadow-rose-600/20'
+                                  : 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-600/20'
+                              }`}
+                            >
+                              <Stethoscope className="w-3.5 h-3.5" /> Continue Encounter
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         ) : currentTab === 'report_review' ? (
-          /* ── 4. DIAGNOSTIC REPORTS INBOX ── */
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+          /* ── 4. DIAGNOSTIC REPORTS INBOX WITH ACCEPT / REVISE ── */
+          <div className="space-y-6">
+            {/* Summary Banner */}
+            <div className="flex flex-col sm:flex-row gap-4">
+              <div className="flex-1 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 flex items-center justify-center">
+                  <TestTube className="w-5 h-5 text-amber-600" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Lab Reports</div>
+                  <div className="text-2xl font-black text-slate-900 dark:text-white">{consultantLabOrders.length}</div>
+                  <div className="text-[11px] text-amber-600 font-semibold">{consultantLabOrders.filter(l => l.status === 'REPORT_PREPARED' || l.status === 'SUBMITTED_TO_CONSULTANT').length} awaiting review</div>
+                </div>
+              </div>
+              <div className="flex-1 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-rose-500/10 flex items-center justify-center">
+                  <AlertCircle className="w-5 h-5 text-rose-500" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Revisions Pending</div>
+                  <div className="text-2xl font-black text-rose-600">{consultantLabOrders.filter(l => l.status === 'REVISION_REQUESTED').length}</div>
+                  <div className="text-[11px] text-slate-400">Correction orders sent to lab</div>
+                </div>
+              </div>
+              <div className="flex-1 p-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm flex items-center gap-4">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-5 h-5 text-emerald-500" />
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase text-slate-400">Accepted Reports</div>
+                  <div className="text-2xl font-black text-emerald-600">{consultantLabOrders.filter(l => l.status === 'ACCEPTED').length}</div>
+                  <div className="text-[11px] text-slate-400">Finalized in patient MRN file</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Lab Orders Table */}
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
               <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <FileSpreadsheet className="w-5 h-5 text-amber-500" /> Diagnostic Report Files &amp; Reviews
+                <TestTube className="w-4 h-4 text-amber-500" /> Laboratory Results Inbox
               </h3>
-              <span className="text-xs font-bold text-slate-500">
-                Total Files: {consultantLabOrders.length + consultantUltrasoundOrders.length}
-              </span>
+              <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                <table className="w-full text-left border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-500 uppercase border-b">
+                      <th className="py-3 px-4">Order No</th>
+                      <th className="py-3 px-4">Patient / MRN</th>
+                      <th className="py-3 px-4">Tests</th>
+                      <th className="py-3 px-4">PDF Report</th>
+                      <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {consultantLabOrders.length === 0 && (
+                      <tr><td colSpan={6} className="py-8 text-center text-slate-400 font-bold">No lab reports in your inbox.</td></tr>
+                    )}
+                    {consultantLabOrders.map((lab) => (
+                      <tr key={lab.id} className={`transition-colors ${
+                        lab.status === 'REVISION_REQUESTED' ? 'bg-rose-50/40 dark:bg-rose-950/20' :
+                        lab.status === 'ACCEPTED' ? 'bg-emerald-50/40 dark:bg-emerald-950/20' : 'hover:bg-amber-50/20'
+                      }`}>
+                        <td className="py-3 px-4 font-mono font-bold text-amber-600">{lab.orderNumber}</td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 dark:text-white">{lab.patientName}</div>
+                          <div className="font-mono text-[11px] text-amber-600">{lab.mrNumber}</div>
+                        </td>
+                        <td className="py-3 px-4 font-semibold text-slate-700 dark:text-slate-300 max-w-[140px] truncate">{lab.tests.join(', ')}</td>
+                        <td className="py-3 px-4 font-mono text-emerald-600 text-[10px]">
+                          {lab.attachedPdfName ? (
+                            <span className="flex items-center gap-1"><FileText className="w-3 h-3" />{lab.attachedPdfName}</span>
+                          ) : <span className="text-slate-400">Pending</span>}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={
+                            lab.status === 'ACCEPTED' ? 'success' :
+                            lab.status === 'REVISION_REQUESTED' ? 'danger' :
+                            (lab.status === 'REPORT_PREPARED' || lab.status === 'SUBMITTED_TO_CONSULTANT') ? 'warning' : 'neutral'
+                          }>{lab.status}</Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex gap-2 justify-end">
+                            <button
+                              onClick={() => setReviewingLabOrder(lab)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> Review
+                            </button>
+                            {lab.status !== 'ACCEPTED' && (lab.resultsV1 || lab.resultsV2) && (
+                              <button
+                                onClick={() => { if (onAcceptLabReport) { onAcceptLabReport(lab.id); } }}
+                                className="px-3 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                              >
+                                <ThumbsUp className="w-3.5 h-3.5" /> Accept
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead>
-                  <tr className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-500 uppercase border-b">
-                    <th className="py-3 px-4">Order No</th>
-                    <th className="py-3 px-4">Type</th>
-                    <th className="py-3 px-4">Patient</th>
-                    <th className="py-3 px-4">File</th>
-                    <th className="py-3 px-4 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {consultantLabOrders.map((lab) => (
-                    <tr key={lab.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="py-3 px-4 font-mono font-bold text-amber-600">{lab.orderNumber}</td>
-                      <td className="py-3 px-4"><Badge variant="warning">LAB</Badge></td>
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{lab.patientName}</td>
-                      <td className="py-3 px-4 font-mono text-emerald-600">{lab.attachedPdfName ?? 'LAB_REPORT_FINAL.pdf'}</td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() =>
-                            setViewingFileModal({
-                              title: `Lab Report - ${lab.orderNumber}`,
-                              fileName: lab.attachedPdfName ?? 'LAB_REPORT_FINAL.pdf',
-                              type: lab.attachedImageBase64 ? 'image' : 'pdf',
-                              contentSummary: lab.resultsV2 || lab.resultsV1 || 'Diagnostic Report Prepared',
-                              imageBase64: lab.attachedImageBase64,
-                              visitId: lab.visitId,
-                            })
-                          }
-                          className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Eye className="w-4 h-4" /> View Report
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {consultantUltrasoundOrders.map((us) => (
-                    <tr key={us.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
-                      <td className="py-3 px-4 font-mono font-bold text-rose-600">{us.orderNumber}</td>
-                      <td className="py-3 px-4"><Badge variant="danger">ULTRASOUND</Badge></td>
-                      <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{us.patientName}</td>
-                      <td className="py-3 px-4 font-mono text-emerald-600">{us.attachedFileName ?? 'SCAN_REPORT.pdf'}</td>
-                      <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() =>
-                            setViewingFileModal({
-                              title: `Ultrasound - ${us.orderNumber}`,
-                              fileName: us.attachedFileName ?? 'SCAN_REPORT.pdf',
-                              type: us.attachedImageBase64 ? 'image' : 'pdf',
-                              contentSummary: us.findingsV1 ?? 'Diagnostic scan report completed.',
-                              imageBase64: us.attachedImageBase64,
-                              visitId: us.visitId,
-                            })
-                          }
-                          className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-sm"
-                        >
-                          <Eye className="w-4 h-4" /> View Report
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                  {consultantLabOrders.length === 0 && consultantUltrasoundOrders.length === 0 && (
-                    <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-400 font-bold">
-                        No uploaded reports found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
+
+            {/* Ultrasound Reports */}
+            {consultantUltrasoundOrders.length > 0 && (
+              <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <Radio className="w-4 h-4 text-rose-500" /> Ultrasound Reports
+                </h3>
+                <div className="overflow-x-auto border border-slate-200 dark:border-slate-800 rounded-xl">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-500 uppercase border-b">
+                        <th className="py-3 px-4">Order No</th>
+                        <th className="py-3 px-4">Patient / MRN</th>
+                        <th className="py-3 px-4">Exam</th>
+                        <th className="py-3 px-4">File</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">View</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {consultantUltrasoundOrders.map((us) => (
+                        <tr key={us.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                          <td className="py-3 px-4 font-mono font-bold text-rose-600">{us.orderNumber}</td>
+                          <td className="py-3 px-4">
+                            <div className="font-bold">{us.patientName}</div>
+                            <div className="font-mono text-[11px] text-rose-500">{us.mrNumber}</div>
+                          </td>
+                          <td className="py-3 px-4">{us.requestedExam}</td>
+                          <td className="py-3 px-4 font-mono text-emerald-600 text-[10px]">{us.attachedFileName ?? '—'}</td>
+                          <td className="py-3 px-4"><Badge variant={us.status === 'ACCEPTED' ? 'success' : 'info'}>{us.status}</Badge></td>
+                          <td className="py-3 px-4 text-right">
+                            <button
+                              onClick={() => setViewingFileModal({ title: `Ultrasound - ${us.orderNumber}`, fileName: us.attachedFileName ?? 'SCAN_REPORT.pdf', type: us.attachedImageBase64 ? 'image' : 'pdf', contentSummary: us.findingsV1 ?? 'Diagnostic scan completed.', imageBase64: us.attachedImageBase64, visitId: us.visitId })}
+                              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-[11px] inline-flex items-center gap-1"
+                            >
+                              <Eye className="w-3.5 h-3.5" /> View
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
           </div>
         ) : currentTab === 'doctor_notes' ? (
           <DoctorNotesManager doctorName={consultantName} visits={visits} />
@@ -1059,6 +1620,32 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
       </div>
 
       {/* ── MODALS ── */}
+
+      {/* Lab Report Full Review Modal */}
+      {reviewingLabOrder && (
+        <Modal
+          isOpen
+          onClose={() => setReviewingLabOrder(null)}
+          title={`Lab Report Review — ${reviewingLabOrder.orderNumber}`}
+          subtitle={`Patient: ${reviewingLabOrder.patientName} | MRN: ${reviewingLabOrder.mrNumber}`}
+          maxWidth="2xl"
+        >
+          <LabReportInlineViewer
+            order={reviewingLabOrder}
+            onClose={() => setReviewingLabOrder(null)}
+            onAccept={() => {
+              if (onAcceptLabReport) onAcceptLabReport(reviewingLabOrder.id);
+              setReviewingLabOrder(null);
+              alert(`Lab report ${reviewingLabOrder.orderNumber} accepted and finalized in patient record!`);
+            }}
+            onRevise={(reason, comment) => {
+              if (onRequestLabRevision) onRequestLabRevision(reviewingLabOrder.id, reason, comment);
+              setReviewingLabOrder(null);
+              alert(`Revision requested for ${reviewingLabOrder.orderNumber}. Lab notified.`);
+            }}
+          />
+        </Modal>
+      )}
 
       {/* Lab Order */}
       <Modal

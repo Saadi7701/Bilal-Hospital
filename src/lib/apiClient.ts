@@ -178,6 +178,10 @@ export async function fetchLabOrdersFromApi(): Promise<LabOrderRecord[]> {
 
 export async function createLabOrderApi(order: LabOrderRecord): Promise<boolean> {
   try {
+    const testsArray = Array.isArray(order.tests) && order.tests.length > 0
+      ? order.tests
+      : [(order.tests as any) || "Lab Test"];
+
     const res = await fetch("/api/lab-orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -188,7 +192,8 @@ export async function createLabOrderApi(order: LabOrderRecord): Promise<boolean>
         visitId: order.visitId,
         consultantId: order.consultantId,
         consultantName: order.consultantName,
-        testName: Array.isArray(order.tests) && order.tests.length > 0 ? order.tests[0] : (order.tests as any || "Lab Test"),
+        testName: testsArray[0],           // first test (for legacy validation check)
+        tests: testsArray,                  // full array for multi-test orders
         testCode: "TEST-01",
         category: order.testCategory,
         priority: order.priority || "NORMAL",
@@ -208,6 +213,7 @@ export async function createLabOrderApi(order: LabOrderRecord): Promise<boolean>
     return false;
   }
 }
+
 
 export async function fetchUltrasoundOrdersFromApi(): Promise<UltrasoundOrderRecord[]> {
   try {

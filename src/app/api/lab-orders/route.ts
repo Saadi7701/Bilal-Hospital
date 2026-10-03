@@ -118,6 +118,29 @@ export async function PUT(req: Request) {
         fields.currentVersion = 1;
       }
       updatedOrder = await labRepository.updateOrderFields(id, fields);
+
+      if (updatedOrder && (updatedOrder.visitId || updatedOrder.mrNumber)) {
+        try {
+          if (updatedOrder.visitId) {
+            await prisma.patientVisit.update({
+              where: { id: updatedOrder.visitId },
+              data: { status: "COMPLETED" },
+            });
+            await prisma.encounter.updateMany({
+              where: { visitId: updatedOrder.visitId, status: { not: "COMPLETED" } },
+              data: { status: "LAB_RESULT_AVAILABLE" },
+            });
+          }
+          if (updatedOrder.mrNumber) {
+            await prisma.patientVisit.updateMany({
+              where: { mrNumber: updatedOrder.mrNumber, status: "LAB_REQUESTED" },
+              data: { status: "COMPLETED" },
+            });
+          }
+        } catch (vErr) {
+          console.warn("[Lab Orders PUT API] Visit/Encounter status sync warning:", vErr);
+        }
+      }
     } else if (action === "ACCEPT") {
       updatedOrder = await labRepository.updateOrderStatus(id, "ACCEPTED");
     } else if (action === "REVISE") {

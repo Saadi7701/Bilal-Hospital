@@ -1,0 +1,316 @@
+export interface LabTemplateParamDef {
+  parameterId: string;
+  name: string;
+  section?: string;
+  unit?: string;
+  referenceRange?: string;
+  maleRange?: string;
+  femaleRange?: string;
+  inputType: "NUMBER" | "TEXT" | "SELECT" | "HEADING";
+  options?: string[];
+  defaultValue?: string;
+  displayOrder: number;
+  isRequired?: boolean;
+}
+
+export interface LabTemplateDef {
+  code: string;
+  name: string;
+  category: string;
+  sampleType: string;
+  description: string;
+  sections: string[];
+  parameters: LabTemplateParamDef[];
+  defaultRemarks?: string;
+  interpretationNotes?: string;
+}
+
+export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
+  {
+    code: "CBC",
+    name: "Complete Blood Count (CBC)",
+    category: "Hematology",
+    sampleType: "Whole Blood (EDTA)",
+    description: "Full automated & microscopic blood cell profile.",
+    sections: ["Hemogram", "Differential Leucocyte Count (DLC)"],
+    defaultRemarks: "Sample processed according to standard pathology SOPs.",
+    interpretationNotes: "Correlate clinically with patient symptoms.",
+    parameters: [
+      { parameterId: "hb", name: "Hemoglobin (Hb)", section: "Hemogram", unit: "g/dL", referenceRange: "12.0 - 16.5", maleRange: "13.5 - 17.5", femaleRange: "12.0 - 15.5", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "tlc", name: "Total Leucocyte Count (TLC)", section: "Hemogram", unit: "/uL", referenceRange: "4,000 - 11,000", inputType: "NUMBER", displayOrder: 2, isRequired: true },
+      { parameterId: "rbc", name: "Red Blood Cells (RBC Count)", section: "Hemogram", unit: "x10^6 /uL", referenceRange: "3.80 - 5.80", maleRange: "4.5 - 5.9", femaleRange: "3.8 - 5.2", inputType: "NUMBER", displayOrder: 3 },
+      { parameterId: "pcv", name: "Hematocrit (PCV)", section: "Hemogram", unit: "%", referenceRange: "36.0 - 50.0", maleRange: "41.0 - 50.0", femaleRange: "36.0 - 44.0", inputType: "NUMBER", displayOrder: 4 },
+      { parameterId: "mcv", name: "Mean Corpuscular Volume (MCV)", section: "Hemogram", unit: "fL", referenceRange: "76.0 - 96.0", inputType: "NUMBER", displayOrder: 5 },
+      { parameterId: "mch", name: "Mean Corpuscular Hb (MCH)", section: "Hemogram", unit: "pg", referenceRange: "27.0 - 32.0", inputType: "NUMBER", displayOrder: 6 },
+      { parameterId: "mchc", name: "Mean Corpuscular Hb Conc (MCHC)", section: "Hemogram", unit: "g/dL", referenceRange: "31.5 - 34.5", inputType: "NUMBER", displayOrder: 7 },
+      { parameterId: "platelets", name: "Platelet Count", section: "Hemogram", unit: "/uL", referenceRange: "150,000 - 450,000", inputType: "NUMBER", displayOrder: 8, isRequired: true },
+      { parameterId: "dlc_heading", name: "Differential Leucocyte Count (DLC)", section: "Differential Leucocyte Count (DLC)", inputType: "HEADING", displayOrder: 9 },
+      { parameterId: "neutrophils", name: "Neutrophils", section: "Differential Leucocyte Count (DLC)", unit: "%", referenceRange: "40 - 75", inputType: "NUMBER", displayOrder: 10 },
+      { parameterId: "lymphocytes", name: "Lymphocytes", section: "Differential Leucocyte Count (DLC)", unit: "%", referenceRange: "20 - 45", inputType: "NUMBER", displayOrder: 11 },
+      { parameterId: "eosinophils", name: "Eosinophils", section: "Differential Leucocyte Count (DLC)", unit: "%", referenceRange: "01 - 06", inputType: "NUMBER", displayOrder: 12 },
+      { parameterId: "monocytes", name: "Monocytes", section: "Differential Leucocyte Count (DLC)", unit: "%", referenceRange: "02 - 10", inputType: "NUMBER", displayOrder: 13 },
+      { parameterId: "basophils", name: "Basophils", section: "Differential Leucocyte Count (DLC)", unit: "%", referenceRange: "00 - 01", inputType: "NUMBER", displayOrder: 14 },
+      { parameterId: "esr", name: "Erythrocyte Sedimentation Rate (ESR)", section: "Hemogram", unit: "mm/1st hr", referenceRange: "00 - 20", maleRange: "0 - 15", femaleRange: "0 - 20", inputType: "NUMBER", displayOrder: 15 },
+    ],
+  },
+  {
+    code: "LFT",
+    name: "Liver Function Tests (LFT)",
+    category: "Biochemistry",
+    sampleType: "Serum",
+    description: "Evaluation of liver enzyme and metabolic activity.",
+    sections: ["Bilirubin Profile", "Enzymes", "Proteins"],
+    parameters: [
+      { parameterId: "bili_total", name: "Serum Bilirubin (Total)", section: "Bilirubin Profile", unit: "mg/dL", referenceRange: "0.2 - 1.2", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "bili_direct", name: "Serum Bilirubin (Direct)", section: "Bilirubin Profile", unit: "mg/dL", referenceRange: "0.0 - 0.3", inputType: "NUMBER", displayOrder: 2 },
+      { parameterId: "bili_indirect", name: "Serum Bilirubin (Indirect)", section: "Bilirubin Profile", unit: "mg/dL", referenceRange: "0.2 - 0.9", inputType: "NUMBER", displayOrder: 3 },
+      { parameterId: "sgpt", name: "SGPT / ALT", section: "Enzymes", unit: "U/L", referenceRange: "05 - 45", maleRange: "Up to 45", femaleRange: "Up to 34", inputType: "NUMBER", displayOrder: 4, isRequired: true },
+      { parameterId: "sgot", name: "SGOT / AST", section: "Enzymes", unit: "U/L", referenceRange: "05 - 40", inputType: "NUMBER", displayOrder: 5 },
+      { parameterId: "alk_phos", name: "Alkaline Phosphatase (ALP)", section: "Enzymes", unit: "U/L", referenceRange: "80 - 290", inputType: "NUMBER", displayOrder: 6 },
+      { parameterId: "total_protein", name: "Total Protein", section: "Proteins", unit: "g/dL", referenceRange: "6.0 - 8.3", inputType: "NUMBER", displayOrder: 7 },
+      { parameterId: "albumin", name: "Serum Albumin", section: "Proteins", unit: "g/dL", referenceRange: "3.5 - 5.0", inputType: "NUMBER", displayOrder: 8 },
+      { parameterId: "globulin", name: "Serum Globulin", section: "Proteins", unit: "g/dL", referenceRange: "2.3 - 3.5", inputType: "NUMBER", displayOrder: 9 },
+      { parameterId: "ag_ratio", name: "A/G Ratio", section: "Proteins", unit: "Ratio", referenceRange: "1.0 - 2.2", inputType: "NUMBER", displayOrder: 10 },
+    ],
+  },
+  {
+    code: "RFT",
+    name: "Renal Function Tests (RFT)",
+    category: "Biochemistry",
+    sampleType: "Serum",
+    description: "Assessment of kidney filtration & metabolic clearance.",
+    sections: ["Renal Profile", "Electrolytes"],
+    parameters: [
+      { parameterId: "blood_urea", name: "Blood Urea", section: "Renal Profile", unit: "mg/dL", referenceRange: "15 - 45", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "bun", name: "Blood Urea Nitrogen (BUN)", section: "Renal Profile", unit: "mg/dL", referenceRange: "07 - 20", inputType: "NUMBER", displayOrder: 2 },
+      { parameterId: "creatinine", name: "Serum Creatinine", section: "Renal Profile", unit: "mg/dL", referenceRange: "0.6 - 1.2", maleRange: "0.7 - 1.3", femaleRange: "0.5 - 1.1", inputType: "NUMBER", displayOrder: 3, isRequired: true },
+      { parameterId: "uric_acid", name: "Serum Uric Acid", section: "Renal Profile", unit: "mg/dL", referenceRange: "2.5 - 7.0", maleRange: "3.4 - 7.0", femaleRange: "2.4 - 6.0", inputType: "NUMBER", displayOrder: 4 },
+      { parameterId: "sodium", name: "Serum Sodium (Na+)", section: "Electrolytes", unit: "mEq/L", referenceRange: "135 - 148", inputType: "NUMBER", displayOrder: 5 },
+      { parameterId: "potassium", name: "Serum Potassium (K+)", section: "Electrolytes", unit: "mEq/L", referenceRange: "3.5 - 5.3", inputType: "NUMBER", displayOrder: 6 },
+      { parameterId: "chloride", name: "Serum Chloride (Cl-)", section: "Electrolytes", unit: "mEq/L", referenceRange: "98 - 107", inputType: "NUMBER", displayOrder: 7 },
+    ],
+  },
+  {
+    code: "LIPID",
+    name: "Lipid Profile",
+    category: "Biochemistry",
+    sampleType: "Fasting Serum",
+    description: "Cardiovascular lipid risk assessment.",
+    sections: ["Lipid Fractionation"],
+    parameters: [
+      { parameterId: "cholesterol", name: "Serum Cholesterol (Total)", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "130 - 200", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "triglycerides", name: "Serum Triglycerides", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "50 - 200", inputType: "NUMBER", displayOrder: 2, isRequired: true },
+      { parameterId: "hdl", name: "HDL Cholesterol (Good)", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "35 - 65", maleRange: "35 - 55", femaleRange: "45 - 65", inputType: "NUMBER", displayOrder: 3 },
+      { parameterId: "ldl", name: "LDL Cholesterol (Bad)", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "Up to 150", inputType: "NUMBER", displayOrder: 4 },
+      { parameterId: "vldl", name: "VLDL Cholesterol", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "10 - 40", inputType: "NUMBER", displayOrder: 5 },
+      { parameterId: "chol_hdl_ratio", name: "Cholesterol / HDL Ratio", section: "Lipid Fractionation", unit: "Ratio", referenceRange: "3.3 - 4.4", inputType: "NUMBER", displayOrder: 6 },
+    ],
+  },
+  {
+    code: "URINE_RE",
+    name: "Urine Routine Examination (Urine R/E)",
+    category: "Clinical Pathology",
+    sampleType: "Fresh Urine Sample",
+    description: "Physical, chemical, and microscopic examination of urine.",
+    sections: ["Physico-Chemical Analysis", "Microscopic Analysis"],
+    parameters: [
+      { parameterId: "color", name: "Colour", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Light Yellow", "Pale Yellow", "Yellow", "Dark Yellow", "Amber", "Reddish"], defaultValue: "Light Yellow", displayOrder: 1 },
+      { parameterId: "appearance", name: "Appearance", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Clear", "Slightly Turbid", "Turbid"], defaultValue: "Clear", displayOrder: 2 },
+      { parameterId: "sp_gravity", name: "Specific Gravity", section: "Physico-Chemical Analysis", unit: "", referenceRange: "1.005 - 1.030", inputType: "TEXT", defaultValue: "1.015", displayOrder: 3 },
+      { parameterId: "ph", name: "pH", section: "Physico-Chemical Analysis", unit: "", referenceRange: "5.0 - 7.0", inputType: "TEXT", defaultValue: "6.0", displayOrder: 4 },
+      { parameterId: "glucose", name: "Glucose / Sugar", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "Trace", "+ (1+)", "++ (2+)", "+++ (3+)", "++++ (4+)"], defaultValue: "Nil", displayOrder: 5 },
+      { parameterId: "proteins", name: "Proteins / Albumin", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "Trace", "+ (1+)", "++ (2+)", "+++ (3+)", "++++ (4+)"], defaultValue: "Nil", displayOrder: 6 },
+      { parameterId: "blood", name: "Blood / Hb", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "Trace", "+", "++", "+++"], defaultValue: "Nil", displayOrder: 7 },
+      { parameterId: "ketones", name: "Ketone Bodies", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "Trace", "Positive"], defaultValue: "Nil", displayOrder: 8 },
+      { parameterId: "bilirubin", name: "Bilirubin", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "Positive"], defaultValue: "Nil", displayOrder: 9 },
+      { parameterId: "urobilinogen", name: "Urobilinogen", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Normal", "Increased"], defaultValue: "Normal", displayOrder: 10 },
+      { parameterId: "leucocytes", name: "Leucocyte Esterase", section: "Physico-Chemical Analysis", inputType: "SELECT", options: ["Nil", "+", "++", "+++"], defaultValue: "Nil", displayOrder: 11 },
+      { parameterId: "pus_cells", name: "Pus Cells (WBCs)", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "Male: 0-3, Female: 0-5", inputType: "TEXT", defaultValue: "1-2", displayOrder: 12 },
+      { parameterId: "rbcs", name: "Red Blood Cells (RBCs)", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "0 - 2 /HPF", inputType: "TEXT", defaultValue: "Nil", displayOrder: 13 },
+      { parameterId: "ep_cells", name: "Epithelial Cells", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "Few /HPF", inputType: "TEXT", defaultValue: "Few", displayOrder: 14 },
+      { parameterId: "crystals", name: "Crystals", section: "Microscopic Analysis", inputType: "TEXT", defaultValue: "Nil", displayOrder: 15 },
+      { parameterId: "casts", name: "Casts", section: "Microscopic Analysis", inputType: "TEXT", defaultValue: "Nil", displayOrder: 16 },
+    ],
+  },
+  {
+    code: "STOOL_RE",
+    name: "Stool Routine Examination (Stool R/E)",
+    category: "Microbiology",
+    sampleType: "Stool Specimen",
+    description: "Macroscopic and microscopic stool investigation.",
+    sections: ["Physical Analysis", "Microscopic Analysis"],
+    parameters: [
+      { parameterId: "color", name: "Colour", section: "Physical Analysis", inputType: "SELECT", options: ["Brown", "Yellowish", "Dark Brown", "Greenish", "Blackish"], defaultValue: "Brown", displayOrder: 1 },
+      { parameterId: "consistency", name: "Consistency", section: "Physical Analysis", inputType: "SELECT", options: ["Formed", "Semi-Formed", "Soft", "Loose", "Watery"], defaultValue: "Formed", displayOrder: 2 },
+      { parameterId: "mucus", name: "Mucus", section: "Physical Analysis", inputType: "SELECT", options: ["Nil", "Present", "Abundant"], defaultValue: "Nil", displayOrder: 3 },
+      { parameterId: "frank_blood", name: "Frank Blood", section: "Physical Analysis", inputType: "SELECT", options: ["Nil", "Present"], defaultValue: "Nil", displayOrder: 4 },
+      { parameterId: "yeast_cells", name: "Yeast Cells", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "Nil / Few", inputType: "TEXT", defaultValue: "Nil", displayOrder: 5 },
+      { parameterId: "pus_cells", name: "Pus Cells", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "Nil / Few", inputType: "TEXT", defaultValue: "Nil", displayOrder: 6 },
+      { parameterId: "bacteria", name: "Bacteria", section: "Microscopic Analysis", inputType: "SELECT", options: ["Normal Flora", "Increased"], defaultValue: "Normal Flora", displayOrder: 7 },
+      { parameterId: "rbcs", name: "Red Blood Cells", section: "Microscopic Analysis", unit: "/HPF", referenceRange: "Nil", inputType: "TEXT", defaultValue: "Nil", displayOrder: 8 },
+      { parameterId: "undigested", name: "Undigested Particles", section: "Microscopic Analysis", inputType: "TEXT", defaultValue: "Nil", displayOrder: 9 },
+      { parameterId: "ova", name: "Ova", section: "Microscopic Analysis", inputType: "TEXT", defaultValue: "Nil Seen", displayOrder: 10 },
+      { parameterId: "cysts", name: "Cysts", section: "Microscopic Analysis", inputType: "TEXT", defaultValue: "Nil Seen", displayOrder: 11 },
+    ],
+  },
+  {
+    code: "WIDAL",
+    name: "Widal Test (Serology for Typhoid)",
+    category: "Serology",
+    sampleType: "Serum",
+    description: "Agglutination test for Salmonella Typhi & Paratyphi antibodies.",
+    sections: ["Antibody Titres"],
+    interpretationNotes: "Significant Titre: 1:160 & above. A rising titre is clinically diagnostic.",
+    parameters: [
+      { parameterId: "typhi_o", name: "Salmonella Typhi 'O' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 1, isRequired: true },
+      { parameterId: "typhi_h", name: "Salmonella Typhi 'H' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 2, isRequired: true },
+      { parameterId: "paratyphi_ao", name: "Salmonella Paratyphi 'A-O' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 3 },
+      { parameterId: "paratyphi_ah", name: "Salmonella Paratyphi 'A-H' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 4 },
+      { parameterId: "paratyphi_bo", name: "Salmonella Paratyphi 'B-O' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 5 },
+      { parameterId: "paratyphi_bh", name: "Salmonella Paratyphi 'B-H' Antibody Titre", section: "Antibody Titres", inputType: "SELECT", options: ["< 1:20", "1:20", "1:40", "1:80", "1:160", "1:320"], defaultValue: "< 1:20", displayOrder: 6 },
+    ],
+  },
+  {
+    code: "SEMEN",
+    name: "Semen Analysis",
+    category: "Microbiology",
+    sampleType: "Semen Specimen",
+    description: "Seminal fluid parameters, sperm count, motility, and morphology.",
+    sections: ["Physical Examination", "Sperm Count & Motility", "Morphology & Microscopy"],
+    parameters: [
+      { parameterId: "volume", name: "Volume", section: "Physical Examination", unit: "ml", referenceRange: "2.0 - 5.0 ml", inputType: "TEXT", displayOrder: 1 },
+      { parameterId: "color", name: "Color / Appearance", section: "Physical Examination", inputType: "TEXT", defaultValue: "Greyish White", displayOrder: 2 },
+      { parameterId: "liquefaction", name: "Liquefaction Time", section: "Physical Examination", unit: "minutes", referenceRange: "Within 30 mins", inputType: "TEXT", defaultValue: "30 mins", displayOrder: 3 },
+      { parameterId: "ph", name: "pH", section: "Physical Examination", unit: "", referenceRange: "7.2 - 8.0", inputType: "TEXT", defaultValue: "7.6", displayOrder: 4 },
+      { parameterId: "count", name: "Sperm Count", section: "Sperm Count & Motility", unit: "million / ml", referenceRange: "60 - 150 million/ml (Borderline: 20-60, Oligo: <20)", inputType: "NUMBER", displayOrder: 5, isRequired: true },
+      { parameterId: "motility_active", name: "Active Motility", section: "Sperm Count & Motility", unit: "%", referenceRange: "> 50 %", inputType: "NUMBER", displayOrder: 6 },
+      { parameterId: "motility_sluggish", name: "Sluggish Motility", section: "Sperm Count & Motility", unit: "%", inputType: "NUMBER", displayOrder: 7 },
+      { parameterId: "motility_immotile", name: "Immotile Sperm", section: "Sperm Count & Motility", unit: "%", inputType: "NUMBER", displayOrder: 8 },
+      { parameterId: "morph_normal", name: "Normal Forms", section: "Morphology & Microscopy", unit: "%", referenceRange: "> 60 %", inputType: "NUMBER", displayOrder: 9 },
+      { parameterId: "morph_abnormal", name: "Abnormal Forms", section: "Morphology & Microscopy", unit: "%", inputType: "NUMBER", displayOrder: 10 },
+      { parameterId: "pus_cells", name: "Pus Cells", section: "Morphology & Microscopy", unit: "/HPF", referenceRange: "0 - 5 /HPF", inputType: "TEXT", defaultValue: "1-2", displayOrder: 11 },
+      { parameterId: "rbcs", name: "Red Blood Cells", section: "Morphology & Microscopy", unit: "/HPF", referenceRange: "Nil", inputType: "TEXT", defaultValue: "Nil", displayOrder: 12 },
+    ],
+  },
+  {
+    code: "BLOOD_GROUP",
+    name: "Blood Group & Rh Factor",
+    category: "Hematology",
+    sampleType: "Whole Blood",
+    description: "ABO blood grouping and Rh factor determination.",
+    sections: ["Blood Group Determination"],
+    parameters: [
+      { parameterId: "abo", name: "ABO Blood Group", section: "Blood Group Determination", inputType: "SELECT", options: ["A", "B", "AB", "O"], defaultValue: "O", displayOrder: 1, isRequired: true },
+      { parameterId: "rh", name: "Rh Factor", section: "Blood Group Determination", inputType: "SELECT", options: ["Positive (+ve)", "Negative (-ve)"], defaultValue: "Positive (+ve)", displayOrder: 2, isRequired: true },
+    ],
+  },
+  {
+    code: "BSF",
+    name: "Blood Sugar Fasting (BSF)",
+    category: "Biochemistry",
+    sampleType: "Fasting Plasma",
+    description: "Fasting plasma glucose concentration.",
+    sections: ["Glucose Level"],
+    parameters: [
+      { parameterId: "bsf", name: "Blood Sugar Fasting", section: "Glucose Level", unit: "mg/dL", referenceRange: "70 - 110 (Normal)", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+    ],
+  },
+  {
+    code: "BSR",
+    name: "Blood Sugar Random (BSR)",
+    category: "Biochemistry",
+    sampleType: "Random Plasma",
+    description: "Random plasma glucose concentration.",
+    sections: ["Glucose Level"],
+    parameters: [
+      { parameterId: "bsr", name: "Blood Sugar Random", section: "Glucose Level", unit: "mg/dL", referenceRange: "70 - 160 (Normal)", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+    ],
+  },
+  {
+    code: "HBA1C",
+    name: "Glycosylated Hemoglobin (HbA1c)",
+    category: "Biochemistry",
+    sampleType: "Whole Blood (EDTA)",
+    description: "Long-term 3-month glycemic control indicator.",
+    sections: ["Glycemic Control"],
+    parameters: [
+      { parameterId: "hba1c", name: "Glycosylated Hb (HbA1c)", section: "Glycemic Control", unit: "%", referenceRange: "4.5 - 6.5 % (Good control: <6.5%, Fair: 6.5-7.5%, Poor: >7.5%)", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+    ],
+  },
+  {
+    code: "CALCIUM",
+    name: "Serum Calcium",
+    category: "Biochemistry",
+    sampleType: "Serum",
+    description: "Total serum calcium level assessment.",
+    sections: ["Mineral Profile"],
+    parameters: [
+      { parameterId: "calcium", name: "Serum Calcium", section: "Mineral Profile", unit: "mg/dL", referenceRange: "8.5 - 10.5", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+    ],
+  },
+  {
+    code: "ALT",
+    name: "Serum ALT / SGPT",
+    category: "Biochemistry",
+    sampleType: "Serum",
+    description: "Specific liver enzyme assay.",
+    sections: ["Enzyme Assay"],
+    parameters: [
+      { parameterId: "alt", name: "Alanine Aminotransferase (ALT/SGPT)", section: "Enzyme Assay", unit: "U/L", referenceRange: "Up to 45 U/L (Males: Up to 45, Females: Up to 34)", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+    ],
+  },
+  {
+    code: "HPYLORI",
+    name: "H. Pylori Antibodies / Antigen",
+    category: "Serology",
+    sampleType: "Serum / Stool",
+    description: "Helicobacter Pylori infection screening.",
+    sections: ["Serology Assay"],
+    parameters: [
+      { parameterId: "hpylori_ict", name: "H. Pylori Antibody (ICT)", section: "Serological Screening", inputType: "SELECT", options: ["Negative", "Positive"], defaultValue: "Negative", displayOrder: 1, isRequired: true },
+      { parameterId: "hpylori_igg", name: "H. Pylori IgG", section: "Serological Screening", unit: "U/mL", referenceRange: "< 0.9 Negative", inputType: "TEXT", defaultValue: "Negative", displayOrder: 2 },
+      { parameterId: "hpylori_igm", name: "H. Pylori IgM", section: "Serological Screening", unit: "U/mL", referenceRange: "< 0.9 Negative", inputType: "TEXT", defaultValue: "Negative", displayOrder: 3 },
+    ],
+  },
+  {
+    code: "HBSAG_HCV",
+    name: "HBsAg & HCV Screening (ICT)",
+    category: "Serology",
+    sampleType: "Serum",
+    description: "Hepatitis B Surface Antigen & Anti-HCV rapid screening.",
+    sections: ["Viral Serology Screening"],
+    parameters: [
+      { parameterId: "hbsag", name: "HBsAg (Hepatitis B Surface Ag)", section: "Viral Serology Screening", inputType: "SELECT", options: ["Non-Reactive (Negative)", "Reactive (Positive)"], defaultValue: "Non-Reactive (Negative)", displayOrder: 1, isRequired: true },
+      { parameterId: "hcv", name: "Anti-HCV (Hepatitis C Antibody)", section: "Viral Serology Screening", inputType: "SELECT", options: ["Non-Reactive (Negative)", "Reactive (Positive)"], defaultValue: "Non-Reactive (Negative)", displayOrder: 2, isRequired: true },
+    ],
+  },
+  {
+    code: "MP",
+    name: "Malarial Parasite (MP)",
+    category: "Hematology",
+    sampleType: "Whole Blood",
+    description: "Screening for Plasmodium Vivax and Plasmodium Falciparum.",
+    sections: ["Parasitology Screening"],
+    parameters: [
+      { parameterId: "mp_smear", name: "Malarial Parasite Blood Smear", section: "Parasitology Screening", inputType: "SELECT", options: ["Negative for Malarial Parasite", "Positive for P. Vivax", "Positive for P. Falciparum"], defaultValue: "Negative for Malarial Parasite", displayOrder: 1, isRequired: true },
+      { parameterId: "mp_ict", name: "MP ICT Rapid Card Test", section: "Parasitology Screening", inputType: "SELECT", options: ["Negative", "Positive (P. Vivax)", "Positive (P. Falciparum)"], defaultValue: "Negative", displayOrder: 2 },
+    ],
+  },
+  {
+    code: "PREGNANCY",
+    name: "Urine Pregnancy Test (HCG)",
+    category: "Clinical Pathology",
+    sampleType: "Urine Specimen",
+    description: "Qualitative Human Chorionic Gonadotropin (HCG) urine test.",
+    sections: ["HCG Screening"],
+    parameters: [
+      { parameterId: "pregnancy_result", name: "Urine HCG Result", section: "HCG Screening", inputType: "SELECT", options: ["Negative", "Positive"], defaultValue: "Negative", displayOrder: 1, isRequired: true },
+    ],
+  },
+];
+
+export function getTemplateByCode(code: string): LabTemplateDef | undefined {
+  if (!code) return undefined;
+  const normalized = code.trim().toUpperCase();
+  return DEFAULT_LAB_TEMPLATES.find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
+}

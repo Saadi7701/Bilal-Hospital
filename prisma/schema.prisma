@@ -52,6 +52,7 @@ model Consultant {
   ultrasoundOrders    UltrasoundOrder[]
   labRevisions        LabRevisionRequest[]
   ultrasoundRevisions UltrasoundRevisionRequest[]
+  encounters          Encounter[]
 }
 
 model Patient {
@@ -88,6 +89,7 @@ model Patient {
   operationNotes   OperationNote[]
   doctorNotes      DoctorNote[]
   patientDocuments PatientDocument[]
+  encounters       Encounter[]
 }
 
 model PatientVisit {
@@ -128,6 +130,7 @@ model PatientVisit {
   operationNotes   OperationNote[]
   doctorNotes      DoctorNote[]
   patientDocuments PatientDocument[]
+  encounters       Encounter[]
 }
 
 model Consultation {
@@ -155,6 +158,54 @@ model Consultation {
   prescriptions Prescription[]
 }
 
+model Encounter {
+  id               String       @id @default(uuid())
+  encounterNumber  String       @unique // Format: ENC-2026-XXXXXX
+  patientId        String
+  patient          Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  patientName      String?
+  mrNumber         String?
+  visitId          String
+  visit            PatientVisit @relation(fields: [visitId], references: [id], onDelete: Cascade)
+  consultantId     String
+  consultant       Consultant   @relation(fields: [consultantId], references: [id])
+  consultantName   String?
+  
+  // Decoupled Encounter Status: OPEN, WAITING_FOR_LAB, PARTIAL_LAB_RESULTS, LAB_RESULT_AVAILABLE, FOLLOW_UP_REQUIRED, COMPLETED
+  status           String       @default("OPEN") 
+
+  chiefComplaint   String?
+  symptoms         String?
+  diagnosis        String?
+  bpSystolic       Int?
+  bpDiastolic      Int?
+  temperature      Float?
+  pulse            Int?
+  weight           Float?
+  clinicalNotes    String?
+  advice           String?
+  
+  startedAt        DateTime     @default(now())
+  completedAt      DateTime?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  labOrders        LabOrder[]
+  prescriptions    Prescription[]
+  timelineEvents   EncounterTimelineEvent[]
+}
+
+model EncounterTimelineEvent {
+  id           String    @id @default(uuid())
+  encounterId  String
+  encounter    Encounter @relation(fields: [encounterId], references: [id], onDelete: Cascade)
+  eventType    String    // ARRIVED, ENCOUNTER_STARTED, LAB_ORDERED, SAMPLE_COLLECTED, RESULT_READY, REVIEWED, RX_WRITTEN, COMPLETED
+  title        String
+  description  String?
+  performedBy  String?
+  createdAt    DateTime  @default(now())
+}
+
 model Prescription {
   id               String       @id @default(uuid())
   legacyId         String?      @unique
@@ -164,6 +215,8 @@ model Prescription {
   mrNumber         String?
   visitId          String
   visit            PatientVisit @relation(fields: [visitId], references: [id])
+  encounterId      String?
+  encounter        Encounter?   @relation(fields: [encounterId], references: [id])
   consultantId     String
   consultant       Consultant   @relation(fields: [consultantId], references: [id])
   consultantName   String?
@@ -201,8 +254,10 @@ model LabOrder {
   patient             Patient  @relation(fields: [patientId], references: [id])
   patientName         String?
   mrNumber            String?
-  visitId             String
-  visit               PatientVisit @relation(fields: [visitId], references: [id])
+  visitId             String?
+  visit               PatientVisit? @relation(fields: [visitId], references: [id])
+  encounterId         String?
+  encounter           Encounter?   @relation(fields: [encounterId], references: [id])
   consultantId        String
   consultant          Consultant @relation(fields: [consultantId], references: [id])
   consultantName      String?
@@ -813,3 +868,21 @@ model PatientDocument {
   @@index([documentType])
   @@index([status])
 }
+
+model LabTestTemplate {
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  name                String
+  category            String   @default("General Pathology")
+  sampleType          String?
+  description         String?
+  sections            String?  // JSON string
+  parameters          String   // JSON string
+  defaultRemarks      String?
+  interpretationNotes String?
+  isActive            Boolean  @default(true)
+  createdBy           String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+

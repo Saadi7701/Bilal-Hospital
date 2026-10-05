@@ -174,12 +174,25 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
     setAdmissions((prev) => [admission, ...prev]);
   };
 
-  const handleDischargePatient = (admissionId: string) => {
-    const dischargeTimeStr = `${new Date().toISOString().split("T")[0]} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
-    setAdmissions(
-      admissions.map((a) =>
+  const handleDischargePatient = (
+    admissionId: string,
+    dischargeOutTime?: string,
+    dischargeCondition?: string,
+    dischargeDiagnosis?: string,
+    dischargeAdvice?: string
+  ) => {
+    const dischargeTimeStr = dischargeOutTime || `${new Date().toISOString().split("T")[0]} ${new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}`;
+    setAdmissions((prev) =>
+      prev.map((a) =>
         a.id === admissionId
-          ? { ...a, status: "DISCHARGED", dischargeOutTime: dischargeTimeStr }
+          ? {
+              ...a,
+              status: "DISCHARGED",
+              dischargeOutTime: dischargeTimeStr,
+              dischargeCondition: dischargeCondition || a.dischargeCondition,
+              dischargeDiagnosis: dischargeDiagnosis || a.dischargeDiagnosis,
+              dischargeAdvice: dischargeAdvice || a.dischargeAdvice,
+            }
           : a
       )
     );
@@ -466,6 +479,8 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
             <LabPortal
               activeTab={activeTab}
               labOrders={labOrders}
+              patients={patients}
+              onAddLabOrder={handleAddLabOrder}
               onSubmitLabResult={handleSubmitLabResult}
               onUpdateLabOrderStatus={handleUpdateLabOrderStatus}
             />

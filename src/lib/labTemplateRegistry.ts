@@ -16,9 +16,11 @@ export interface LabTemplateParamDef {
 export interface LabTemplateDef {
   code: string;
   name: string;
+  fullForm?: string;
   category: string;
   sampleType: string;
   description: string;
+  templateFileName?: string;
   sections: string[];
   parameters: LabTemplateParamDef[];
   defaultRemarks?: string;
@@ -29,6 +31,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "CBC",
     name: "Complete Blood Count (CBC)",
+    fullForm: "Complete Blood Count / Complete Blood Picture (CBC / CP)",
+    templateFileName: "CBC.xls",
     category: "Hematology",
     sampleType: "Whole Blood (EDTA)",
     description: "Full automated & microscopic blood cell profile.",
@@ -54,8 +58,25 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
     ],
   },
   {
+    code: "BLOOD_CP",
+    name: "Blood Complete Picture (Blood CP)",
+    fullForm: "Blood Complete Picture & Peripheral Smear Analysis",
+    templateFileName: "Blood cp.xls",
+    category: "Hematology",
+    sampleType: "Whole Blood (EDTA)",
+    description: "Detailed red cell, white cell, and platelet morphology report.",
+    sections: ["Hemogram", "Differential Leucocyte Count (DLC)"],
+    parameters: [
+      { parameterId: "hb", name: "Hemoglobin (Hb)", section: "Hemogram", unit: "g/dL", referenceRange: "12.0 - 16.5", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "tlc", name: "Total Leucocyte Count (TLC)", section: "Hemogram", unit: "/uL", referenceRange: "4,000 - 11,000", inputType: "NUMBER", displayOrder: 2, isRequired: true },
+      { parameterId: "platelets", name: "Platelet Count", section: "Hemogram", unit: "/uL", referenceRange: "150,000 - 450,000", inputType: "NUMBER", displayOrder: 3, isRequired: true },
+    ],
+  },
+  {
     code: "LFT",
     name: "Liver Function Tests (LFT)",
+    fullForm: "Liver Function Tests (Serum Bilirubin, SGPT/ALT, SGOT, ALP, Proteins)",
+    templateFileName: "0584  ALT.xlsm",
     category: "Biochemistry",
     sampleType: "Serum",
     description: "Evaluation of liver enzyme and metabolic activity.",
@@ -76,6 +97,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "RFT",
     name: "Renal Function Tests (RFT)",
+    fullForm: "Renal Function Tests / Kidney Profile (Blood Urea, Creatinine, Uric Acid & Electrolytes)",
+    templateFileName: "RFTs-.xlsx",
     category: "Biochemistry",
     sampleType: "Serum",
     description: "Assessment of kidney filtration & metabolic clearance.",
@@ -93,6 +116,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "LIPID",
     name: "Lipid Profile",
+    fullForm: "Complete Fasting Lipid Profile (Cholesterol, Triglycerides, HDL, LDL, VLDL)",
+    templateFileName: "Lipid Profile..xls",
     category: "Biochemistry",
     sampleType: "Fasting Serum",
     description: "Cardiovascular lipid risk assessment.",
@@ -109,6 +134,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "URINE_RE",
     name: "Urine Routine Examination (Urine R/E)",
+    fullForm: "Urine Routine Examination & Microscopic Analysis (Urine R/E)",
+    templateFileName: "Urine RE.xls",
     category: "Clinical Pathology",
     sampleType: "Fresh Urine Sample",
     description: "Physical, chemical, and microscopic examination of urine.",
@@ -135,6 +162,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "STOOL_RE",
     name: "Stool Routine Examination (Stool R/E)",
+    fullForm: "Stool Routine Examination & Parasitology (Stool R/E)",
+    templateFileName: "Stool RE.xls",
     category: "Microbiology",
     sampleType: "Stool Specimen",
     description: "Macroscopic and microscopic stool investigation.",
@@ -156,6 +185,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "WIDAL",
     name: "Widal Test (Serology for Typhoid)",
+    fullForm: "Widal Agglutination Serology Test for Salmonella Typhi & Paratyphi Antibodies",
+    templateFileName: "Widal Test.xls",
     category: "Serology",
     sampleType: "Serum",
     description: "Agglutination test for Salmonella Typhi & Paratyphi antibodies.",
@@ -173,6 +204,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "SEMEN",
     name: "Semen Analysis",
+    fullForm: "Semen Analysis & Sperm Count, Motility, and Morphology Evaluation",
+    templateFileName: "Semen Analysis.xls",
     category: "Microbiology",
     sampleType: "Semen Specimen",
     description: "Seminal fluid parameters, sperm count, motility, and morphology.",
@@ -195,6 +228,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "BLOOD_GROUP",
     name: "Blood Group & Rh Factor",
+    fullForm: "ABO Blood Grouping & Rhesus (Rh) Factor Determination",
+    templateFileName: "Blood Group.xls",
     category: "Hematology",
     sampleType: "Whole Blood",
     description: "ABO blood grouping and Rh factor determination.",
@@ -207,6 +242,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "BSF",
     name: "Blood Sugar Fasting (BSF)",
+    fullForm: "Blood Sugar Fasting (BSF) Quantitative Plasma Glucose",
+    templateFileName: "Blood Sugar Fasting.xls",
     category: "Biochemistry",
     sampleType: "Fasting Plasma",
     description: "Fasting plasma glucose concentration.",
@@ -218,6 +255,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "BSR",
     name: "Blood Sugar Random (BSR)",
+    fullForm: "Blood Sugar Random (BSR) Quantitative Plasma Glucose",
+    templateFileName: "BSR.xls",
     category: "Biochemistry",
     sampleType: "Random Plasma",
     description: "Random plasma glucose concentration.",
@@ -227,8 +266,44 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
     ],
   },
   {
+    code: "BSF_LIPID",
+    name: "BSF & Lipid Profile Combined",
+    fullForm: "Blood Sugar Fasting & Complete Lipid Profile Dual Panel",
+    templateFileName: "BSF. Lipid Profile..xls",
+    category: "Biochemistry",
+    sampleType: "Fasting Serum & Plasma",
+    description: "Combined fasting plasma glucose and comprehensive lipid profile.",
+    sections: ["Glucose Level", "Lipid Fractionation"],
+    parameters: [
+      { parameterId: "bsf", name: "Blood Sugar Fasting", section: "Glucose Level", unit: "mg/dL", referenceRange: "70 - 110", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "cholesterol", name: "Serum Cholesterol (Total)", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "130 - 200", inputType: "NUMBER", displayOrder: 2, isRequired: true },
+      { parameterId: "triglycerides", name: "Serum Triglycerides", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "50 - 200", inputType: "NUMBER", displayOrder: 3, isRequired: true },
+      { parameterId: "hdl", name: "HDL Cholesterol", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "35 - 65", inputType: "NUMBER", displayOrder: 4 },
+      { parameterId: "ldl", name: "LDL Cholesterol", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "Up to 150", inputType: "NUMBER", displayOrder: 5 },
+    ],
+  },
+  {
+    code: "URIC_LIPID",
+    name: "Uric Acid & Lipid Profile Combined",
+    fullForm: "Serum Uric Acid & Lipid Profile Dual Diagnostic Panel",
+    templateFileName: "Uric Acid Lipid Profile.xls",
+    category: "Biochemistry",
+    sampleType: "Fasting Serum",
+    description: "Combined serum uric acid and lipid fractionation profile.",
+    sections: ["Renal Metabolite", "Lipid Fractionation"],
+    parameters: [
+      { parameterId: "uric_acid", name: "Serum Uric Acid", section: "Renal Metabolite", unit: "mg/dL", referenceRange: "2.5 - 7.0", inputType: "NUMBER", displayOrder: 1, isRequired: true },
+      { parameterId: "cholesterol", name: "Serum Cholesterol (Total)", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "130 - 200", inputType: "NUMBER", displayOrder: 2, isRequired: true },
+      { parameterId: "triglycerides", name: "Serum Triglycerides", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "50 - 200", inputType: "NUMBER", displayOrder: 3, isRequired: true },
+      { parameterId: "hdl", name: "HDL Cholesterol", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "35 - 65", inputType: "NUMBER", displayOrder: 4 },
+      { parameterId: "ldl", name: "LDL Cholesterol", section: "Lipid Fractionation", unit: "mg/dL", referenceRange: "Up to 150", inputType: "NUMBER", displayOrder: 5 },
+    ],
+  },
+  {
     code: "HBA1C",
     name: "Glycosylated Hemoglobin (HbA1c)",
+    fullForm: "Glycosylated Hemoglobin (HbA1c) 3-Month Glycemic Control Index",
+    templateFileName: "CBC.xls",
     category: "Biochemistry",
     sampleType: "Whole Blood (EDTA)",
     description: "Long-term 3-month glycemic control indicator.",
@@ -240,6 +315,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "CALCIUM",
     name: "Serum Calcium",
+    fullForm: "Total Serum Calcium Quantitative Assay",
+    templateFileName: "Calcium.xlsx",
     category: "Biochemistry",
     sampleType: "Serum",
     description: "Total serum calcium level assessment.",
@@ -251,6 +328,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "ALT",
     name: "Serum ALT / SGPT",
+    fullForm: "Alanine Aminotransferase Specific Liver Assay (ALT / SGPT)",
+    templateFileName: "0584  ALT.xlsm",
     category: "Biochemistry",
     sampleType: "Serum",
     description: "Specific liver enzyme assay.",
@@ -262,6 +341,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "HPYLORI",
     name: "H. Pylori Antibodies / Antigen",
+    fullForm: "Helicobacter Pylori Rapid Serological Antibodies & Antigen Screening",
+    templateFileName: "H-Pylori Antibody.xls",
     category: "Serology",
     sampleType: "Serum / Stool",
     description: "Helicobacter Pylori infection screening.",
@@ -275,6 +356,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "HBSAG_HCV",
     name: "HBsAg & HCV Screening (ICT)",
+    fullForm: "Hepatitis B Surface Antigen (HBsAg) & Hepatitis C Antibody (Anti-HCV) Dual Screening",
+    templateFileName: "HBsAg (By ICT) + HCV (ICT) -.xls",
     category: "Serology",
     sampleType: "Serum",
     description: "Hepatitis B Surface Antigen & Anti-HCV rapid screening.",
@@ -287,6 +370,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "MP",
     name: "Malarial Parasite (MP)",
+    fullForm: "Malarial Parasite Thin/Thick Blood Smear & Rapid ICT Card Assay",
+    templateFileName: "MP.xls",
     category: "Hematology",
     sampleType: "Whole Blood",
     description: "Screening for Plasmodium Vivax and Plasmodium Falciparum.",
@@ -299,6 +384,8 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   {
     code: "PREGNANCY",
     name: "Urine Pregnancy Test (HCG)",
+    fullForm: "Urine Human Chorionic Gonadotropin (HCG) Pregnancy Qualitative Assay",
+    templateFileName: "Pregnancy Test.xls",
     category: "Clinical Pathology",
     sampleType: "Urine Specimen",
     description: "Qualitative Human Chorionic Gonadotropin (HCG) urine test.",

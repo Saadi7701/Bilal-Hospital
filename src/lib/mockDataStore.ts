@@ -71,6 +71,9 @@ export interface AdmissionRecord {
   patientId: string;
   patientName: string;
   mrNumber: string;
+  cnic?: string;
+  age?: number;
+  gender?: string;
   admissionType: "OT" | "GYNECOLOGY";
   department: string;
   doctorName: string;
@@ -79,6 +82,9 @@ export interface AdmissionRecord {
   admissionInTime: string;
   dischargeOutTime?: string;
   status: "ADMITTED" | "IN_OT" | "POST_OP" | "RECOVERY" | "DISCHARGED";
+  dischargeCondition?: string;
+  dischargeDiagnosis?: string;
+  dischargeAdvice?: string;
   dailyNotes?: string;
   feeAmount: number;
 }
@@ -128,6 +134,9 @@ export interface LabOrderRecord {
   patientId: string;
   patientName: string;
   mrNumber: string;
+  cnic?: string;
+  age?: number;
+  gender?: string;
   visitId: string;
   consultantId: string;
   consultantName: string;

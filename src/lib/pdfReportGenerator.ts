@@ -252,7 +252,7 @@ export class LabPdfReportGenerator {
           <div><span class="font-bold text-slate-500">PATIENT NAME:</span> <strong class="text-slate-900 font-sans text-sm">${data.patientName}</strong></div>
           <div><span class="font-bold text-slate-500">MRN (PATIENT ID):</span> <strong class="text-amber-600 font-bold">${data.mrNumber}</strong></div>
           <div><span class="font-bold text-slate-500">AGE / GENDER:</span> ${data.age} Yrs / ${data.gender}</div>
-          <div><span class="font-bold text-slate-500">ADMISSION NO:</span> ${data.admissionId || "OPD"}</div>
+          <div><span class="font-bold text-slate-500">CNIC NUMBER:</span> <strong class="text-slate-900 font-bold">${data.cnic || "N/A"}</strong></div>
           <div><span class="font-bold text-slate-500">CONSULTANT:</span> ${data.consultantName}</div>
           <div><span class="font-bold text-slate-500">LAB ORDER NO:</span> ${data.orderNumber}</div>
           <div><span class="font-bold text-slate-500">SAMPLE DATE:</span> ${data.sampleDate}</div>

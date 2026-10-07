@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { patientDocumentRepository } from "@/repositories/PatientDocumentRepository";
 import { prisma } from "@/lib/prisma";
 
+export const dynamic = "force-dynamic";
+
 /**
  * GET /api/patient-files?patientId=<id>
  *

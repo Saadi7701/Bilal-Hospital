@@ -15,9 +15,15 @@ export async function GET(req: Request) {
       const records = await prisma.labOrder.findMany({
         orderBy: { createdAt: "desc" },
         take: 200,
-        include: { items: true, reports: { include: { versions: true } } },
+        include: { items: true, patient: { select: { cnic: true, age: true, gender: true } } },
       });
-      orders = records.map((o) => ({ ...o, _id: o.id }));
+      orders = records.map((o: any) => ({
+        ...o,
+        cnic: o.cnic || (o.patient ? o.patient.cnic : ""),
+        age: o.age || (o.patient ? o.patient.age : 35),
+        gender: o.gender || (o.patient ? o.patient.gender : "Male"),
+        _id: o.id,
+      }));
     }
 
     return NextResponse.json({ labOrders: orders }, { status: 200 });

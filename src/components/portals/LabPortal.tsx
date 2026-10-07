@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import JSZip from "jszip";
 import {
   TestTube,
   FileSpreadsheet,
@@ -31,6 +32,10 @@ import {
   Layers,
   Sparkles,
   Filter,
+  Download,
+  Calendar,
+  Archive,
+  Trash2,
 } from "lucide-react";
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
@@ -111,6 +116,19 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   // New Requisition Modal Search & Filter State
   const [newReqTemplateSearch, setNewReqTemplateSearch] = useState("");
   const [newReqCategoryFilter, setNewReqCategoryFilter] = useState("ALL");
+
+  // Daily Log Date & Archiving State
+  const [selectedLogDate, setSelectedLogDate] = useState<string>("ALL");
+  const [showArchivedTab, setShowArchivedTab] = useState(false);
+  const [archivedOrderIds, setArchivedOrderIds] = useState<string[]>(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("lab_archived_order_ids");
+      return saved ? JSON.parse(saved) : [];
+    } catch {
+      return [];
+    }
+  });
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -312,8 +330,33 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     setIsCreateNewModalOpen(true);
   };
 
-  // Filter orders by MRN or patient search query
+  // Date & Day Formatter Helper
+  const formatDateAndDay = (dateStr?: string) => {
+    if (!dateStr) dateStr = new Date().toISOString().split("T")[0];
+    try {
+      const d = new Date(dateStr.includes("T") ? dateStr : `${dateStr}T00:00:00`);
+      if (isNaN(d.getTime())) return dateStr;
+      const dayName = d.toLocaleDateString("en-US", { weekday: "short" });
+      const formattedDate = d.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+      return `${formattedDate} (${dayName})`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Filter orders by search query, date filter, and archive status
   const filteredOrders = labOrders.filter((l) => {
+    const isArchived = archivedOrderIds.includes(l.id);
+    if (showArchivedTab ? !isArchived : isArchived) return false;
+
+    if (selectedLogDate !== "ALL") {
+      const todayStr = new Date().toISOString().split("T")[0];
+      const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+      if (selectedLogDate === "TODAY" && l.requestDate !== todayStr) return false;
+      if (selectedLogDate === "YESTERDAY" && l.requestDate !== yesterdayStr) return false;
+      if (selectedLogDate !== "TODAY" && selectedLogDate !== "YESTERDAY" && l.requestDate !== selectedLogDate) return false;
+    }
+
     if (!searchMrnQuery.trim()) return true;
     const q = searchMrnQuery.toLowerCase();
     return (
@@ -323,6 +366,94 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       l.orderNumber.toLowerCase().includes(q)
     );
   });
+
+  // Download Daily ZIP Archive Handler
+  const handleDownloadDailyZip = async () => {
+    const todayStr = new Date().toISOString().split("T")[0];
+    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
+
+    const targetOrders = labOrders.filter((o) => {
+      const isCompleted = o.status === "ACCEPTED" || o.status === "SUBMITTED_TO_CONSULTANT" || Boolean(o.resultsV1);
+      const notArchived = !archivedOrderIds.includes(o.id);
+      let matchesDate = true;
+      if (selectedLogDate === "TODAY") matchesDate = o.requestDate === todayStr;
+      else if (selectedLogDate === "YESTERDAY") matchesDate = o.requestDate === yesterdayStr;
+      else if (selectedLogDate !== "ALL") matchesDate = o.requestDate === selectedLogDate;
+      return isCompleted && notArchived && matchesDate;
+    });
+
+    if (targetOrders.length === 0) {
+      alert("No finalized daily lab reports found matching your current filter to download.");
+      return;
+    }
+
+    const zip = new JSZip();
+    const dateTag = selectedLogDate === "ALL" || selectedLogDate === "TODAY" ? todayStr : selectedLogDate;
+    const folderName = `BILAL_HOSPITAL_LAB_REPORTS_${dateTag}`;
+    const folder = zip.folder(folderName);
+
+    for (const order of targetOrders) {
+      const rawCnic = order.cnic && order.cnic.trim() ? order.cnic.trim().replace(/[/\\?%*:|"<>]/g, "-") : "N-A";
+      const cleanName = order.patientName ? order.patientName.trim().replace(/[/\\?%*:|"<>]/g, "_") : "PATIENT";
+      // Exact filename format: NAME(CNIC).html
+      const filename = `${cleanName}(${rawCnic}).html`;
+
+      const testCode = order.tests && order.tests[0] ? order.tests[0] : "CBC";
+      const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
+
+      let resultsObj: Record<string, string> = {};
+      try {
+        resultsObj = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
+      } catch {
+        resultsObj = { notes: order.resultsV1 || "" };
+      }
+
+      const evaluated = labTemplateEngine.evaluateAllResults(tmpl, resultsObj);
+
+      const htmlContent = labPdfReportGenerator.generateHtmlReport({
+        reportId: `LABREP-${order.orderNumber}`,
+        orderNumber: order.orderNumber,
+        patientName: order.patientName,
+        mrNumber: order.mrNumber,
+        cnic: order.cnic || "",
+        age: order.age || 35,
+        gender: order.gender || "Male",
+        admissionId: "OPD",
+        consultantName: order.consultantName,
+        testCategory: tmpl.category,
+        testName: tmpl.name,
+        sampleDate: order.requestDate || new Date().toLocaleDateString(),
+        reportDate: new Date().toLocaleDateString(),
+        technicianName: "Lab Technologist",
+        template: tmpl,
+        evaluatedResults: evaluated,
+        versionNumber: order.currentVersion || 1,
+      });
+
+      if (folder) {
+        folder.file(filename, htmlContent);
+      }
+    }
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${folderName}.zip`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Ask to clear daily list
+    if (window.confirm(`Downloaded ${targetOrders.length} reports in ZIP format as "${folderName}.zip"!\n\nDo you want to clear these downloaded reports from the active daily list to start a fresh daily list?`)) {
+      const updatedArchivedIds = Array.from(new Set([...archivedOrderIds, ...targetOrders.map((o) => o.id)]));
+      setArchivedOrderIds(updatedArchivedIds);
+      try {
+        localStorage.setItem("lab_archived_order_ids", JSON.stringify(updatedArchivedIds));
+      } catch {}
+    }
+  };
 
   const revisionOrders = filteredOrders.filter((l) => l.status === "REVISION_REQUESTED");
   const pendingOrders = filteredOrders.filter(
@@ -532,63 +663,162 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
           {/* ALL REQUISITIONS LOG TABLE */}
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-sm p-6 space-y-4">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
-                <FileSpreadsheet className="w-4 h-4 text-slate-500" />
-                <span>All Requisitions & Finalized Reports Log</span>
-              </h3>
-              <span className="text-xs text-slate-500">{filteredOrders.length} Records</span>
+            {/* Header & Controls */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 border-b border-slate-100 dark:border-slate-800 pb-4">
+              <div>
+                <h3 className="text-base font-black text-slate-900 dark:text-white uppercase tracking-wider flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-amber-500" />
+                  <span>{showArchivedTab ? "Archived Lab Reports Log" : "All Requisitions & Finalized Reports Log"} ({filteredOrders.length})</span>
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Complete log of all lab orders from Consultant Portal & Direct Requisitions with Date & Day tracking.
+                </p>
+              </div>
+
+              {/* Controls Toolbar */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Search Box */}
+                <div className="relative min-w-[200px]">
+                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search MRN, Name, CNIC..."
+                    value={searchMrnQuery}
+                    onChange={(e) => setSearchMrnQuery(e.target.value)}
+                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border text-xs focus:ring-2 focus:ring-amber-500"
+                  />
+                </div>
+
+                {/* Date Filter Dropdown */}
+                <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl text-xs font-bold">
+                  <button
+                    onClick={() => setSelectedLogDate("ALL")}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${selectedLogDate === "ALL" ? "bg-amber-500 text-slate-950 shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-200"}`}
+                  >
+                    All Dates
+                  </button>
+                  <button
+                    onClick={() => setSelectedLogDate("TODAY")}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${selectedLogDate === "TODAY" ? "bg-amber-500 text-slate-950 shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-200"}`}
+                  >
+                    Today
+                  </button>
+                  <button
+                    onClick={() => setSelectedLogDate("YESTERDAY")}
+                    className={`px-2.5 py-1 rounded-lg transition-all ${selectedLogDate === "YESTERDAY" ? "bg-amber-500 text-slate-950 shadow-sm" : "text-slate-600 dark:text-slate-300 hover:bg-slate-200"}`}
+                  >
+                    Yesterday
+                  </button>
+                </div>
+
+                {/* Archive Toggle Button */}
+                <button
+                  onClick={() => setShowArchivedTab(!showArchivedTab)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold inline-flex items-center gap-1.5 border transition-all ${
+                    showArchivedTab
+                      ? "bg-purple-600 text-white border-purple-600 shadow-sm"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200"
+                  }`}
+                >
+                  <Archive className="w-3.5 h-3.5" />
+                  <span>{showArchivedTab ? "Active Daily List" : `Archived (${archivedOrderIds.length})`}</span>
+                </button>
+
+                {/* Download Daily ZIP Archive Button */}
+                {!showArchivedTab && (
+                  <button
+                    onClick={handleDownloadDailyZip}
+                    className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 shadow-md cursor-pointer transition-all"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>Download Daily ZIP</span>
+                  </button>
+                )}
+              </div>
             </div>
 
+            {/* Table */}
             <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 dark:bg-slate-800 text-[11px] font-bold text-slate-500 uppercase border-b">
                     <th className="py-3 px-4">Order ID</th>
+                    <th className="py-3 px-4 bg-amber-500/10 text-amber-700 dark:text-amber-400">Date & Day</th>
                     <th className="py-3 px-4">Patient MRN & Name</th>
-                    <th className="py-3 px-4">CNIC</th>
+                    <th className="py-3 px-4">CNIC Number</th>
                     <th className="py-3 px-4">Consultant</th>
-                    <th className="py-3 px-4">Test</th>
-                    <th className="py-3 px-4">Local File</th>
+                    <th className="py-3 px-4">Requested Test(s)</th>
+                    <th className="py-3 px-4">Daily Report PDF Name</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                  {filteredOrders.map((order) => (
-                    <tr key={order.id} className="hover:bg-slate-50/50">
-                      <td className="py-3 px-4 font-mono font-bold text-amber-600">{order.orderNumber}</td>
-                      <td className="py-3 px-4 font-bold">
-                        {order.patientName}
-                        <span className="block text-[11px] font-mono text-amber-600">{order.mrNumber}</span>
-                      </td>
-                      <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">{order.cnic || "N/A"}</td>
-                      <td className="py-3 px-4 text-slate-600 dark:text-slate-300">{order.consultantName}</td>
-                      <td className="py-3 px-4 font-semibold">{order.tests.join(", ")}</td>
-                      <td className="py-3 px-4 font-mono text-emerald-600 font-bold">{order.attachedPdfName || "-"}</td>
-                      <td className="py-3 px-4">
-                        <Badge variant={order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" ? "success" : "warning"}>
-                          {order.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        {(order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" || order.resultsV1) && (
+                  {filteredOrders.map((order) => {
+                    const rawCnic = order.cnic && order.cnic.trim() ? order.cnic.trim() : "N-A";
+                    const pdfNameFormat = `${order.patientName.trim()}(${rawCnic}).pdf`;
+
+                    return (
+                      <tr key={order.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                        <td className="py-3 px-4 font-mono font-bold text-amber-600">{order.orderNumber}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-amber-700 dark:text-amber-400 bg-amber-500/5">
+                          {formatDateAndDay(order.requestDate)}
+                        </td>
+                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">
+                          {order.patientName}
+                          <span className="block text-[10px] font-mono text-amber-600">{order.mrNumber}</span>
+                        </td>
+                        <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400 font-bold">{order.cnic || "N/A"}</td>
+                        <td className="py-3 px-4 text-slate-600 dark:text-slate-300 font-semibold">{order.consultantName}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900 dark:text-white">{order.tests.join(", ")}</td>
+                        <td className="py-3 px-4 font-mono text-emerald-600 dark:text-emerald-400 font-bold">
+                          {order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" || order.resultsV1 ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded border border-emerald-300 dark:border-emerald-800 text-[11px]">
+                              <FileText className="w-3 h-3 text-emerald-500" />
+                              <span>{pdfNameFormat}</span>
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal italic">Pending Result</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <Badge variant={order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" ? "success" : "warning"}>
+                            {order.status}
+                          </Badge>
+                        </td>
+                        <td className="py-3 px-4 text-right space-x-1.5">
+                          {(order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" || order.resultsV1) ? (
+                            <button
+                              onClick={() => handleGeneratePrintPreview(order)}
+                              className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              <Printer className="w-3.5 h-3.5" /> View PDF
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setSelectedOrderForResult(order)}
+                              className="px-2.5 py-1 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              <FlaskConical className="w-3.5 h-3.5" /> Enter Result
+                            </button>
+                          )}
                           <button
-                            onClick={() => handleGeneratePrintPreview(order)}
-                            className="px-2.5 py-1 rounded-lg bg-emerald-600/10 text-emerald-600 hover:bg-emerald-600/20 font-bold text-xs inline-flex items-center gap-1 cursor-pointer"
+                            onClick={() => setViewingOrderModal(order)}
+                            className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200"
                           >
-                            <Printer className="w-3.5 h-3.5" /> View PDF
+                            Details
                           </button>
-                        )}
-                        <button
-                          onClick={() => setViewingOrderModal(order)}
-                          className="px-3 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 font-bold text-xs"
-                        >
-                          Details
-                        </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {filteredOrders.length === 0 && (
+                    <tr>
+                      <td colSpan={9} className="py-8 text-center text-slate-400 text-xs">
+                        {showArchivedTab ? "No archived reports found." : "No requisitions or lab reports found for the selected date filter."}
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>

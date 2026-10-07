@@ -132,10 +132,12 @@ export async function PUT(req: Request) {
               where: { id: updatedOrder.visitId },
               data: { status: "COMPLETED" },
             });
-            await prisma.encounter.updateMany({
-              where: { visitId: updatedOrder.visitId, status: { not: "COMPLETED" } },
-              data: { status: "LAB_RESULT_AVAILABLE" },
-            });
+            if ((prisma as any).encounter) {
+              await (prisma as any).encounter.updateMany({
+                where: { visitId: updatedOrder.visitId, status: { not: "COMPLETED" } },
+                data: { status: "LAB_RESULT_AVAILABLE" },
+              });
+            }
           }
           if (updatedOrder.mrNumber) {
             await prisma.patientVisit.updateMany({

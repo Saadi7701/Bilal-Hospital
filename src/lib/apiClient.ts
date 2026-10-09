@@ -394,7 +394,7 @@ export async function fetchCashTransactionsFromApi(period: string = "today"): Pr
         transactionType: t.transactionType || "INCOME",
         category: t.category,
         department: t.department || "General",
-        amount: t.amount,
+        amount: Number(t.amount) || 0,
         paymentMethod: t.paymentMethod || t.paymentMode || "CASH",
         description: t.description || `Cash transaction for ${t.category}`,
         date: t.transactionDate ? new Date(t.transactionDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],

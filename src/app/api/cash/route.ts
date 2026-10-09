@@ -36,7 +36,7 @@ export async function GET(req: Request) {
       orderBy: { transactionDate: "desc" },
       take: period === "all" || !period ? 500 : undefined,
     });
-    const transactions = records.map((t) => ({ ...t, _id: t.id }));
+    const transactions = records.map((t) => ({ ...t, amount: Number(t.amount || 0), _id: t.id }));
 
     // Monthly Aggregation (Always calculates full month for dashboard totals)
     const monthRecords = await prisma.cashTransaction.findMany({

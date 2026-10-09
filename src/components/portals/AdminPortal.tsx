@@ -285,8 +285,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     let dailyExpenses = 0;
 
     dateTxns.forEach((t) => {
+      const amt = Number(t.amount) || 0;
       if (t.transactionType === "INCOME") {
-        const amt = t.amount;
         if (t.category.includes("Consultation") || t.department === "Cardiology" || t.department === "OPD") {
           consultantCash += amt;
         } else if (t.department === "Laboratory" || t.category.includes("Lab")) {
@@ -301,7 +301,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           consultantCash += amt;
         }
       } else if (t.transactionType === "EXPENSE") {
-        dailyExpenses += t.amount;
+        dailyExpenses += amt;
       }
     });
 
@@ -351,43 +351,43 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       }
 
       const row = matrixMap[key];
-      const amt = t.amount;
+      const amt = Number(t.amount) || 0;
 
       if (t.category.includes("Consultation") || t.department === "Cardiology" || t.department === "OPD") {
-        row.consultantFee += amt;
+        row.consultantFee = (Number(row.consultantFee) || 0) + amt;
       } else if (t.department === "Laboratory" || t.category.includes("Lab")) {
-        row.labReportFee += amt;
+        row.labReportFee = (Number(row.labReportFee) || 0) + amt;
       } else if (t.department === "Pharmacy" || t.category.includes("Pharmacy")) {
-        row.pharmacyFee += amt;
+        row.pharmacyFee = (Number(row.pharmacyFee) || 0) + amt;
       } else if (t.department === "Ultrasound" || t.category.includes("Ultrasound")) {
-        row.ultrasoundFee += amt;
+        row.ultrasoundFee = (Number(row.ultrasoundFee) || 0) + amt;
       } else if (t.department === "OT" || t.category.includes("OT")) {
-        row.otFee += amt;
+        row.otFee = (Number(row.otFee) || 0) + amt;
       } else if (t.department === "Gynecology" || t.category.includes("Gyne")) {
-        row.gyneFee += amt;
+        row.gyneFee = (Number(row.gyneFee) || 0) + amt;
       } else {
         // Default to Consultant Fee if unspecified
-        row.consultantFee += amt;
+        row.consultantFee = (Number(row.consultantFee) || 0) + amt;
       }
 
       row.rowTotal =
-        row.consultantFee +
-        row.labReportFee +
-        row.pharmacyFee +
-        row.ultrasoundFee +
-        row.otFee +
-        row.gyneFee;
+        (Number(row.consultantFee) || 0) +
+        (Number(row.labReportFee) || 0) +
+        (Number(row.pharmacyFee) || 0) +
+        (Number(row.ultrasoundFee) || 0) +
+        (Number(row.otFee) || 0) +
+        (Number(row.gyneFee) || 0);
     });
 
   const matrixRows = Object.values(matrixMap);
 
   // Column Totals
-  const totalConsultantFeeCol = matrixRows.reduce((acc, r) => acc + r.consultantFee, 0);
-  const totalLabReportCol = matrixRows.reduce((acc, r) => acc + r.labReportFee, 0);
-  const totalPharmacyCol = matrixRows.reduce((acc, r) => acc + r.pharmacyFee, 0);
-  const totalUltrasoundCol = matrixRows.reduce((acc, r) => acc + r.ultrasoundFee, 0);
-  const totalOtCol = matrixRows.reduce((acc, r) => acc + r.otFee, 0);
-  const totalGyneCol = matrixRows.reduce((acc, r) => acc + r.gyneFee, 0);
+  const totalConsultantFeeCol = matrixRows.reduce((acc, r) => acc + (Number(r.consultantFee) || 0), 0);
+  const totalLabReportCol = matrixRows.reduce((acc, r) => acc + (Number(r.labReportFee) || 0), 0);
+  const totalPharmacyCol = matrixRows.reduce((acc, r) => acc + (Number(r.pharmacyFee) || 0), 0);
+  const totalUltrasoundCol = matrixRows.reduce((acc, r) => acc + (Number(r.ultrasoundFee) || 0), 0);
+  const totalOtCol = matrixRows.reduce((acc, r) => acc + (Number(r.otFee) || 0), 0);
+  const totalGyneCol = matrixRows.reduce((acc, r) => acc + (Number(r.gyneFee) || 0), 0);
   const finalGrandTotalCashIn =
     totalConsultantFeeCol +
     totalLabReportCol +
@@ -402,7 +402,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   const expenseTransactions = cashTransactions.filter(
     (t) => t.transactionType === "EXPENSE"
   );
-  const totalExpense = expenseTransactions.reduce((acc, t) => acc + t.amount, 0);
+  const totalExpense = expenseTransactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
   const netBalance = finalGrandTotalCashIn - totalExpense;
 
   // Chart Data: Dept Income Breakdown

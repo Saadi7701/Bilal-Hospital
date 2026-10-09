@@ -2,27 +2,50 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { visitRepository } from "@/repositories/VisitRepository";
 import { cashRepository } from "@/repositories/CashRepository";
+import { getPKTDateRange } from "@/lib/dateUtils";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const consultantId = searchParams.get("consultantId");
     const status = searchParams.get("status");
+    const period = searchParams.get("period") || "today"; // 'today' | 'all'
+    const pktDateRange = getPKTDateRange(searchParams.get("date"));
 
-    let visits;
-    if (consultantId) {
-      visits = await visitRepository.findByConsultant(consultantId, status || undefined);
-    } else {
-      const whereClause: any = {};
-      if (status) whereClause.status = status;
+    let whereClause: any = {};
 
-      const records = await prisma.patientVisit.findMany({
-        where: whereClause,
-        orderBy: { createdAt: "desc" },
-        take: 200,
-      });
-      visits = records.map((v) => ({ ...v, _id: v.id }));
+    if (period === "today") {
+      whereClause.OR = [
+        {
+          visitDate: {
+            gte: pktDateRange.startOfPKTDay,
+            lt: pktDateRange.startOfTomorrowPKTDay,
+          },
+        },
+        {
+          status: {
+            in: ["WAITING", "REGISTERED", "WITH_CONSULTANT", "LAB_REQUESTED", "LAB_RESULT_AVAILABLE"],
+          },
+        },
+      ];
     }
+
+    if (status) {
+      // If a specific status is requested, enforce status
+      whereClause.status = status;
+    }
+
+    if (consultantId) {
+      whereClause.consultantId = consultantId;
+    }
+
+    const records = await prisma.patientVisit.findMany({
+      where: whereClause,
+      orderBy: { createdAt: "desc" },
+      take: period === "all" ? 500 : 200,
+    });
+
+    const visits = records.map((v) => ({ ...v, _id: v.id }));
 
     return NextResponse.json({ visits }, { status: 200 });
   } catch (error: any) {

@@ -2,19 +2,42 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { labRepository } from "@/repositories/LabRepository";
 import { cashRepository } from "@/repositories/CashRepository";
+import { getPKTDateRange } from "@/lib/dateUtils";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const patientId = searchParams.get("patientId");
+    const period = searchParams.get("period") || "today"; // 'today' | 'all'
+    const pktDateRange = getPKTDateRange(searchParams.get("date"));
 
     let orders;
     if (patientId) {
       orders = await labRepository.findOrdersByPatient(patientId);
     } else {
+      let whereClause: any = {};
+      if (period === "today") {
+        whereClause = {
+          OR: [
+            {
+              requestDate: {
+                gte: pktDateRange.startOfPKTDay,
+                lt: pktDateRange.startOfTomorrowPKTDay,
+              },
+            },
+            {
+              status: {
+                in: ["ORDERED", "SAMPLE_COLLECTED", "PROCESSING", "REVISION_REQUESTED"],
+              },
+            },
+          ],
+        };
+      }
+
       const records = await prisma.labOrder.findMany({
+        where: whereClause,
         orderBy: { createdAt: "desc" },
-        take: 200,
+        take: period === "all" ? 500 : 200,
         include: { items: true, patient: { select: { cnic: true, age: true, gender: true } } },
       });
       orders = records.map((o: any) => ({

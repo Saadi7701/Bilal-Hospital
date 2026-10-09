@@ -1,19 +1,40 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { prescriptionRepository } from "@/repositories/PrescriptionRepository";
+import { getPKTDateRange } from "@/lib/dateUtils";
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
     const patientId = searchParams.get("patientId");
+    const period = searchParams.get("period") || "today"; // 'today' | 'all'
+    const pktDateRange = getPKTDateRange(searchParams.get("date"));
 
     let prescriptions;
     if (patientId) {
       prescriptions = await prescriptionRepository.findByPatient(patientId);
     } else {
+      let whereClause: any = {};
+      if (period === "today") {
+        whereClause = {
+          OR: [
+            {
+              prescriptionDate: {
+                gte: pktDateRange.startOfPKTDay,
+                lt: pktDateRange.startOfTomorrowPKTDay,
+              },
+            },
+            {
+              isDispensed: false,
+            },
+          ],
+        };
+      }
+
       const records = await prisma.prescription.findMany({
+        where: whereClause,
         orderBy: { createdAt: "desc" },
-        take: 200,
+        take: period === "all" ? 500 : 200,
         include: { items: true },
       });
       prescriptions = records.map((p) => ({ ...p, _id: p.id }));

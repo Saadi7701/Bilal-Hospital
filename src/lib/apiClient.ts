@@ -383,13 +383,13 @@ export async function fetchMedicinesFromApi(): Promise<MedicineRecord[]> {
   }
 }
 
-export async function fetchCashTransactionsFromApi(): Promise<CashTransactionRecord[]> {
+export async function fetchCashTransactionsFromApi(period: string = "today"): Promise<CashTransactionRecord[]> {
   try {
-    const res = await fetch("/api/cash");
+    const res = await fetch(`/api/cash?period=${period}`);
     if (!res.ok) throw new Error(`API returned status ${res.status}`);
     const data = await res.json();
     if (data.transactions && Array.isArray(data.transactions)) {
-      return data.transactions.map((t: any) => ({
+      const list: CashTransactionRecord[] = data.transactions.map((t: any) => ({
         id: t._id || t.id,
         transactionNumber: t.transactionNumber || t.receiptNumber || `TXN-${Date.now()}`,
         transactionType: t.transactionType || "INCOME",
@@ -404,6 +404,10 @@ export async function fetchCashTransactionsFromApi(): Promise<CashTransactionRec
         mrNumber: t.mrNumber,
         createdBy: t.enteredBy || t.createdBy || "Staff",
       }));
+      if (data.monthlyStats) {
+        (list as any).monthlyStats = data.monthlyStats;
+      }
+      return list;
     }
     return [];
   } catch (err: any) {

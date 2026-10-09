@@ -1,25 +1,86 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { cashRepository } from "@/repositories/CashRepository";
+import { getPKTDateRange, getPKTMonthRange } from "@/lib/dateUtils";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const period = searchParams.get("period") || "today"; // 'today' | 'month' | 'all'
+    const dateParam = searchParams.get("date");
+
+    const pktDateRange = getPKTDateRange(dateParam);
+    const pktMonthRange = getPKTMonthRange(dateParam);
+
+    let whereClause: any = {};
+    if (period === "today") {
+      whereClause = {
+        transactionDate: {
+          gte: pktDateRange.startOfPKTDay,
+          lt: pktDateRange.startOfTomorrowPKTDay,
+        },
+      };
+    } else if (period === "month") {
+      whereClause = {
+        transactionDate: {
+          gte: pktMonthRange.startOfPKTMonth,
+          lt: pktMonthRange.startOfNextPKTMonth,
+        },
+      };
+    }
+
     const records = await prisma.cashTransaction.findMany({
+      where: whereClause,
       orderBy: { transactionDate: "desc" },
-      take: 200,
+      take: period === "all" || !period ? 500 : undefined,
     });
     const transactions = records.map((t) => ({ ...t, _id: t.id }));
+
+    // Monthly Aggregation (Always calculates full month for dashboard totals)
+    const monthRecords = await prisma.cashTransaction.findMany({
+      where: {
+        transactionDate: {
+          gte: pktMonthRange.startOfPKTMonth,
+          lt: pktMonthRange.startOfNextPKTMonth,
+        },
+      },
+    });
+
+    let monthlyIncome = 0;
+    let monthlyExpense = 0;
+    monthRecords.forEach((t) => {
+      const amt = Number(t.amount || 0);
+      if (t.transactionType === "INCOME") monthlyIncome += amt;
+      else if (t.transactionType === "EXPENSE") monthlyExpense += amt;
+    });
 
     const todayClosing = await cashRepository.findDailyClosingByDate(new Date());
 
     return NextResponse.json(
-      { transactions, dailyClosing: todayClosing },
+      {
+        transactions,
+        dailyClosing: todayClosing,
+        monthlyStats: {
+          monthString: pktMonthRange.monthStringPKT,
+          monthlyIncome,
+          monthlyExpense,
+          monthlyNetBalance: monthlyIncome - monthlyExpense,
+          totalMonthTransactions: monthRecords.length,
+        },
+        pktDateRange: {
+          dateStringPKT: pktDateRange.dateStringPKT,
+          startOfPKTDay: pktDateRange.startOfPKTDay,
+          startOfTomorrowPKTDay: pktDateRange.startOfTomorrowPKTDay,
+        },
+      },
       { status: 200 }
     );
   } catch (error: any) {
     console.error("[Cash API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch cash ledger transactions." },
+      { error: "Failed to fetch cash ledger transactions: " + error.message },
       { status: 500 }
     );
   }

@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Admission Forms GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch admission forms." },
+      { error: `Failed to fetch admission forms: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Admission Form POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create admission form: ${error.message}` },
+      { error: `Failed to create admission form: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }

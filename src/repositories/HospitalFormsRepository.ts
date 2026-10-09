@@ -1,5 +1,13 @@
 import { prisma } from "../lib/prisma";
 
+function parseSafeDate(val: any): Date | null {
+  if (!val) return null;
+  if (val instanceof Date) return isNaN(val.getTime()) ? null : val;
+  const d = new Date(val);
+  if (isNaN(d.getTime())) return null;
+  return d;
+}
+
 export class HospitalFormsRepository {
   private async resolveFormEntities(data: any) {
     let patientId = data.patientId ? data.patientId.toString() : "";
@@ -353,13 +361,16 @@ export class HospitalFormsRepository {
       formNumber = `ADM-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
     }
 
+    const doa = parseSafeDate(data.dateOfAdmission) || new Date();
+    const dodr = parseSafeDate(data.dateOfDischargeRefer);
+
     return await prisma.admissionForm.create({
       data: {
         formNumber,
         patientId,
         visitId,
         phcRegNumber: data.phcRegNumber || null,
-        dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : new Date(),
+        dateOfAdmission: doa,
         timeOfAdmission: data.timeOfAdmission || null,
         maritalStatus: data.maritalStatus || null,
         cnic: data.cnic || null,
@@ -367,7 +378,7 @@ export class HospitalFormsRepository {
         finalDiagnosis: data.finalDiagnosis || null,
         admittedThrough: data.admittedThrough || null,
         opdErMrNo: data.opdErMrNo || null,
-        dateOfDischargeRefer: data.dateOfDischargeRefer ? new Date(data.dateOfDischargeRefer) : null,
+        dateOfDischargeRefer: dodr,
         timeOfDischargeRefer: data.timeOfDischargeRefer || null,
         consentName: data.consentName || null,
         consentRelation: data.consentRelation || null,

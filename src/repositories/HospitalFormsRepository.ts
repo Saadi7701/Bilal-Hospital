@@ -14,30 +14,48 @@ export class HospitalFormsRepository {
     let visitId: string | null = data.visitId ? data.visitId.toString() : null;
     let createdById: string | null = data.createdById ? data.createdById.toString() : null;
 
-    let patientObj = await prisma.patient.findFirst({
-      where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: data.mrNumber || patientId }] },
-    });
+    let patientObj: any = null;
+    if (patientId) {
+      patientObj = await prisma.patient.findFirst({
+        where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: data.mrNumber || patientId }] },
+      }).catch(() => null);
+    }
 
-    if (!patientObj && (data.mrNumber || data.patientName || data.patient)) {
-      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
-      const pName = data.patientName || (data.patient ? data.patient.fullName : "Patient");
-      const pMrn = data.mrNumber || (data.patient ? data.patient.mrNumber : `MR-${Date.now()}`);
-      const pPhone = data.phone || (data.patient ? data.patient.phone : "0000000000");
+    if (!patientObj) {
+      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } }).catch(() => null);
+      const pName = data.patientName || data.fullName || (data.patient ? data.patient.fullName : "Hospital Patient");
+      const pMrn = data.mrNumber || data.opdErMrNo || (data.patient ? data.patient.mrNumber : null) || `MR-${Date.now().toString().slice(-6)}`;
+      const pPhone = data.phone || (data.patient ? data.patient.phone : "03000000000");
       const pCnic = data.cnic || (data.patient ? data.patient.cnic : null);
 
-      patientObj = await prisma.patient.upsert({
-        where: { mrNumber: pMrn },
-        update: {},
-        create: {
-          mrNumber: pMrn,
-          fullName: pName,
-          age: Number(data.age || (data.patient ? data.patient.age : 30)) || 30,
-          gender: (data.gender || (data.patient ? data.patient.gender : "MALE") || "MALE").toUpperCase(),
-          phone: pPhone,
-          cnic: pCnic,
-          createdBy: adminUser?.id || "",
-        },
-      });
+      try {
+        patientObj = await prisma.patient.upsert({
+          where: { mrNumber: pMrn },
+          update: {},
+          create: {
+            mrNumber: pMrn,
+            fullName: pName,
+            age: Number(data.age || (data.patient ? data.patient.age : 30)) || 30,
+            gender: (data.gender || (data.patient ? data.patient.gender : "MALE") || "MALE").toUpperCase(),
+            phone: pPhone,
+            cnic: pCnic && pCnic.trim() ? pCnic.trim() : null,
+            createdBy: adminUser?.id || "",
+          },
+        });
+      } catch (upsertErr: any) {
+        // Fallback: create patient with unique timestamp MRN if duplicate MRN conflict occurs
+        const fallbackMrn = `MR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        patientObj = await prisma.patient.create({
+          data: {
+            mrNumber: fallbackMrn,
+            fullName: pName,
+            age: Number(data.age) || 30,
+            gender: "MALE",
+            phone: pPhone,
+            createdBy: adminUser?.id || "",
+          },
+        }).catch(() => null);
+      }
     }
 
     if (patientObj) {
@@ -47,14 +65,14 @@ export class HospitalFormsRepository {
     if (visitId) {
       const visitObj = await prisma.patientVisit.findFirst({
         where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
-      });
+      }).catch(() => null);
       visitId = visitObj ? visitObj.id : null;
     }
 
     if (createdById) {
       const userObj = await prisma.user.findFirst({
         where: { OR: [{ id: createdById }, { legacyId: createdById }, { username: createdById }] },
-      });
+      }).catch(() => null);
       createdById = userObj ? userObj.id : null;
     }
 

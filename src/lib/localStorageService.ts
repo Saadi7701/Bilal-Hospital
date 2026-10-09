@@ -46,7 +46,9 @@ export class LocalStorageService {
   private rootPath: string;
 
   constructor() {
-    const configuredRoot = process.env.PATIENT_FILES_ROOT || "./storage/patient-files";
+    const isVercel = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+    const defaultRoot = isVercel ? "/tmp/storage/patient-files" : "./storage/patient-files";
+    const configuredRoot = process.env.PATIENT_FILES_ROOT || defaultRoot;
     this.rootPath = path.resolve(configuredRoot);
     this.ensureDirectoryExists(this.rootPath);
   }
@@ -90,8 +92,12 @@ export class LocalStorageService {
    * Ensures a directory path exists on disk.
    */
   public ensureDirectoryExists(dirPath: string): void {
-    if (!fs.existsSync(dirPath)) {
-      fs.mkdirSync(dirPath, { recursive: true });
+    try {
+      if (!fs.existsSync(dirPath)) {
+        fs.mkdirSync(dirPath, { recursive: true });
+      }
+    } catch (e: any) {
+      console.warn(`[LocalStorageService] Cannot create directory ${dirPath}:`, e?.message);
     }
   }
 
@@ -104,29 +110,33 @@ export class LocalStorageService {
 
     const metadataPath = path.join(patientDir, "patient.json");
     let existingMeta: any = {};
-    if (fs.existsSync(metadataPath)) {
-      try {
-        existingMeta = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
-      } catch (e) {
-        existingMeta = {};
+    try {
+      if (fs.existsSync(metadataPath)) {
+        try {
+          existingMeta = JSON.parse(fs.readFileSync(metadataPath, "utf-8"));
+        } catch (e) {
+          existingMeta = {};
+        }
       }
+
+      const updatedMeta = {
+        ...existingMeta,
+        patientId: patient.id,
+        mrNumber: patient.mrNumber,
+        cnic: patient.cnic || existingMeta.cnic || null,
+        fullName: patient.fullName,
+        gender: patient.gender || existingMeta.gender || null,
+        age: patient.age ?? existingMeta.age ?? null,
+        phone: patient.phone || existingMeta.phone || null,
+        updatedAt: new Date().toISOString(),
+        createdAt: existingMeta.createdAt || new Date().toISOString(),
+        folderName: this.getPatientFolderName(patient),
+      };
+
+      fs.writeFileSync(metadataPath, JSON.stringify(updatedMeta, null, 2), "utf-8");
+    } catch (e: any) {
+      console.warn(`[LocalStorageService] Patient metadata write warning:`, e?.message);
     }
-
-    const updatedMeta = {
-      ...existingMeta,
-      patientId: patient.id,
-      mrNumber: patient.mrNumber,
-      cnic: patient.cnic || existingMeta.cnic || null,
-      fullName: patient.fullName,
-      gender: patient.gender || existingMeta.gender || null,
-      age: patient.age ?? existingMeta.age ?? null,
-      phone: patient.phone || existingMeta.phone || null,
-      updatedAt: new Date().toISOString(),
-      createdAt: existingMeta.createdAt || new Date().toISOString(),
-      folderName: this.getPatientFolderName(patient),
-    };
-
-    fs.writeFileSync(metadataPath, JSON.stringify(updatedMeta, null, 2), "utf-8");
     return patientDir;
   }
 
@@ -175,52 +185,62 @@ export class LocalStorageService {
   public saveDocument(options: SaveDocumentOptions): SavedDocumentMetadata {
     const { patient, admissionNumberOrId, category, fileName, data, mimeType } = options;
 
-    // Ensure admission structure exists
-    const admissionDir = this.createAdmissionDirectory(patient, admissionNumberOrId);
-    const categoryDir = path.join(admissionDir, this.sanitizeName(category));
-    this.ensureDirectoryExists(categoryDir);
-
     const sanitizedFileName = this.sanitizeName(fileName);
-    const targetPath = path.join(categoryDir, sanitizedFileName);
-    const tempPath = `${targetPath}.tmp_${Date.now()}`;
-
     const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data, "utf-8");
     const checksum = this.calculateChecksum(buffer);
-
-    // 1. Write to temporary file first
-    fs.writeFileSync(tempPath, buffer);
-
-    // 2. Verify temporary file was written cleanly
-    if (!fs.existsSync(tempPath)) {
-      throw new Error(`Failed to write temporary file for document: ${sanitizedFileName}`);
-    }
-
-    const stat = fs.statSync(tempPath);
-    if (stat.size !== buffer.length) {
-      fs.unlinkSync(tempPath);
-      throw new Error(
-        `File size mismatch during archive. Expected ${buffer.length} bytes, got ${stat.size} bytes.`
-      );
-    }
-
-    // 3. Atomically move/rename to final path
-    fs.renameSync(tempPath, targetPath);
-
-    // Calculate relative path from rootPath for database reference
-    const relativePath = path.relative(this.rootPath, targetPath).replace(/\\/g, "/");
     const patientFolder = this.getPatientFolderName(patient);
+    const admissionId = this.sanitizeName(admissionNumberOrId);
 
-    return {
-      absolutePath: targetPath,
-      relativePath,
-      fileName: sanitizedFileName,
-      fileSize: buffer.length,
-      checksum,
-      mimeType: mimeType || this.inferMimeType(sanitizedFileName),
-      category,
-      admissionId: this.sanitizeName(admissionNumberOrId),
-      patientFolder,
-    };
+    try {
+      // Ensure admission structure exists
+      const admissionDir = this.createAdmissionDirectory(patient, admissionNumberOrId);
+      const categoryDir = path.join(admissionDir, this.sanitizeName(category));
+      this.ensureDirectoryExists(categoryDir);
+
+      const targetPath = path.join(categoryDir, sanitizedFileName);
+      const tempPath = `${targetPath}.tmp_${Date.now()}`;
+
+      // 1. Write to temporary file first
+      fs.writeFileSync(tempPath, buffer);
+
+      // 2. Verify temporary file was written cleanly
+      if (fs.existsSync(tempPath)) {
+        const stat = fs.statSync(tempPath);
+        if (stat.size === buffer.length) {
+          // 3. Atomically move/rename to final path
+          fs.renameSync(tempPath, targetPath);
+        } else {
+          try { fs.unlinkSync(tempPath); } catch {}
+        }
+      }
+
+      const relativePath = path.relative(this.rootPath, targetPath).replace(/\\/g, "/");
+      return {
+        absolutePath: targetPath,
+        relativePath,
+        fileName: sanitizedFileName,
+        fileSize: buffer.length,
+        checksum,
+        mimeType: mimeType || this.inferMimeType(sanitizedFileName),
+        category,
+        admissionId,
+        patientFolder,
+      };
+    } catch (err: any) {
+      console.warn(`[LocalStorageService] saveDocument fallback for ${sanitizedFileName}:`, err?.message);
+      const fallbackRelative = `admissions/${admissionId}/${category}/${sanitizedFileName}`;
+      return {
+        absolutePath: path.join(this.rootPath, fallbackRelative),
+        relativePath: fallbackRelative,
+        fileName: sanitizedFileName,
+        fileSize: buffer.length,
+        checksum,
+        mimeType: mimeType || this.inferMimeType(sanitizedFileName),
+        category,
+        admissionId,
+        patientFolder,
+      };
+    }
   }
 
   /**

@@ -4,7 +4,7 @@ export class LabRepository {
   async createLabOrder(orderData: any): Promise<any> {
     let patientId = orderData.patientId ? orderData.patientId.toString() : "";
     let visitId: string | null = orderData.visitId ? orderData.visitId.toString() : null;
-    let consultantId = orderData.consultantId ? orderData.consultantId.toString() : "";
+    let consultantId: string | null = orderData.consultantId ? orderData.consultantId.toString() : null;
 
     const patientObj = await prisma.patient.findFirst({
       where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: orderData.mrNumber || patientId }] },
@@ -19,14 +19,18 @@ export class LabRepository {
       visitId = visitObj ? visitObj.id : null;
     }
 
-    const consultantObj = await prisma.consultant.findFirst({
-      where: { OR: [{ id: consultantId }, { legacyId: consultantId }] },
-    });
-    if (consultantObj) {
-      consultantId = consultantObj.id;
-    } else {
-      const anyConsultant = await prisma.consultant.findFirst();
-      if (anyConsultant) consultantId = anyConsultant.id;
+    // Resolve consultant FK — for direct lab requests, consultantId may legitimately be null
+    if (consultantId) {
+      const consultantObj = await prisma.consultant.findFirst({
+        where: { OR: [{ id: consultantId }, { legacyId: consultantId }] },
+      });
+      if (consultantObj) {
+        consultantId = consultantObj.id;
+      } else {
+        // Could not resolve — try any existing consultant as fallback, else null (direct lab request)
+        const anyConsultant = await prisma.consultant.findFirst();
+        consultantId = anyConsultant ? anyConsultant.id : null;
+      }
     }
 
     const itemsToCreate = Array.isArray(orderData.items)
@@ -44,8 +48,8 @@ export class LabRepository {
         patientName: orderData.patientName || (patientObj ? patientObj.fullName : "Patient"),
         mrNumber: orderData.mrNumber || (patientObj ? patientObj.mrNumber : "MR-0000"),
         ...(visitId ? { visitId } : {}),
-        consultantId,
-        consultantName: orderData.consultantName || "Doctor",
+        ...(consultantId ? { consultantId } : {}),
+        consultantName: orderData.consultantName || "Direct Lab Request",
         testCategory: orderData.testCategory || "General Pathology",
         clinicalNotes: orderData.clinicalNotes || null,
         priority: orderData.priority || "NORMAL",

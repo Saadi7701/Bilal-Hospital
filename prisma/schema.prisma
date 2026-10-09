@@ -258,8 +258,8 @@ model LabOrder {
   visit               PatientVisit? @relation(fields: [visitId], references: [id])
   encounterId         String?
   encounter           Encounter?   @relation(fields: [encounterId], references: [id])
-  consultantId        String
-  consultant          Consultant @relation(fields: [consultantId], references: [id])
+  consultantId        String?
+  consultant          Consultant? @relation(fields: [consultantId], references: [id])
   consultantName      String?
   testCategory        String
   clinicalNotes       String?

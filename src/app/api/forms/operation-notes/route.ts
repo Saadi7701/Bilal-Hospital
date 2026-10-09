@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Operation Notes GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch operation notes." },
+      { error: `Failed to fetch operation notes: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Operation Note POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create operation note: ${error.message}` },
+      { error: `Failed to create operation note: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }

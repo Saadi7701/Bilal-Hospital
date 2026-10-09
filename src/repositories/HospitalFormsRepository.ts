@@ -118,28 +118,40 @@ export class HospitalFormsRepository {
   }
 
   async getReferralForms(query?: { patientId?: string; search?: string }) {
-    const where: any = {};
-    if (query?.patientId) {
-      where.patientId = query.patientId;
+    try {
+      const where: any = {};
+      if (query?.patientId) {
+        const pObj = await prisma.patient.findFirst({
+          where: { OR: [{ id: query.patientId }, { legacyId: query.patientId }, { mrNumber: query.patientId }] },
+        });
+        where.patientId = pObj ? pObj.id : query.patientId;
+      }
+      if (query?.search) {
+        const s = query.search.trim();
+        where.OR = [
+          { formNumber: { contains: s, mode: "insensitive" } },
+          { referredHospitalName: { contains: s, mode: "insensitive" } },
+          { patient: { fullName: { contains: s, mode: "insensitive" } } },
+          { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
+        ];
+      }
+      return await prisma.referralForm.findMany({
+        where,
+        include: {
+          patient: true,
+          visit: true,
+          medicines: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (err: any) {
+      console.warn("[HospitalFormsRepository] getReferralForms fallback:", err?.message);
+      return await prisma.referralForm.findMany({
+        include: { patient: true, visit: true, medicines: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }).catch(() => []);
     }
-    if (query?.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { formNumber: { contains: s, mode: "insensitive" } },
-        { patient: { fullName: { contains: s, mode: "insensitive" } } },
-        { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
-        { referredHospitalName: { contains: s, mode: "insensitive" } },
-      ];
-    }
-    return await prisma.referralForm.findMany({
-      where,
-      include: {
-        patient: true,
-        visit: true,
-        medicines: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
   }
 
   async getReferralFormById(id: string) {
@@ -163,7 +175,7 @@ export class HospitalFormsRepository {
     return await prisma.referralForm.update({
       where: { id },
       data: {
-        dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : undefined,
+        dateOfAdmission: parseSafeDate(data.dateOfAdmission) ?? undefined,
         presentingComplaint: data.presentingComplaint,
         provisionalDiagnosis: data.provisionalDiagnosis,
         briefHistoryExamination: data.briefHistoryExamination,
@@ -174,7 +186,7 @@ export class HospitalFormsRepository {
         referredHospitalName: data.referredHospitalName,
         reasonForReferral: data.reasonForReferral,
         doctorName: data.doctorName,
-        signDate: data.signDate ? new Date(data.signDate) : undefined,
+        signDate: parseSafeDate(data.signDate) ?? undefined,
         signTime: data.signTime,
         status: data.status,
         ...(medicines
@@ -221,8 +233,8 @@ export class HospitalFormsRepository {
         formNumber,
         patientId,
         visitId,
-        formDate: data.formDate ? new Date(data.formDate) : new Date(),
-        dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : null,
+        formDate: parseSafeDate(data.formDate) || new Date(),
+        dateOfAdmission: parseSafeDate(data.dateOfAdmission),
         presentingComplaint: data.presentingComplaint || null,
         briefHistoryExamination: data.briefHistoryExamination || null,
         diagnosticInvestigations: data.diagnosticInvestigations || null,
@@ -231,13 +243,13 @@ export class HospitalFormsRepository {
         outcome: data.outcome || null,
         dischargeAdvisedByDoctor: data.dischargeAdvisedByDoctor ?? true,
         isLAMA: data.isLAMA ?? false,
-        dischargeDate: data.dischargeDate ? new Date(data.dischargeDate) : null,
+        dischargeDate: parseSafeDate(data.dischargeDate),
         dischargeCondition: data.dischargeCondition || null,
-        followUpDate: data.followUpDate ? new Date(data.followUpDate) : null,
+        followUpDate: parseSafeDate(data.followUpDate),
         followUpDepartment: data.followUpDepartment || null,
         dietaryInstructions: data.dietaryInstructions || null,
         doctorName: data.doctorName || null,
-        signDate: data.signDate ? new Date(data.signDate) : null,
+        signDate: parseSafeDate(data.signDate),
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
         createdById,
@@ -262,27 +274,39 @@ export class HospitalFormsRepository {
   }
 
   async getDischargeForms(query?: { patientId?: string; search?: string }) {
-    const where: any = {};
-    if (query?.patientId) {
-      where.patientId = query.patientId;
+    try {
+      const where: any = {};
+      if (query?.patientId) {
+        const pObj = await prisma.patient.findFirst({
+          where: { OR: [{ id: query.patientId }, { legacyId: query.patientId }, { mrNumber: query.patientId }] },
+        });
+        where.patientId = pObj ? pObj.id : query.patientId;
+      }
+      if (query?.search) {
+        const s = query.search.trim();
+        where.OR = [
+          { formNumber: { contains: s, mode: "insensitive" } },
+          { patient: { fullName: { contains: s, mode: "insensitive" } } },
+          { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
+        ];
+      }
+      return await prisma.dischargeForm.findMany({
+        where,
+        include: {
+          patient: true,
+          visit: true,
+          medicines: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (err: any) {
+      console.warn("[HospitalFormsRepository] getDischargeForms fallback:", err?.message);
+      return await prisma.dischargeForm.findMany({
+        include: { patient: true, visit: true, medicines: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }).catch(() => []);
     }
-    if (query?.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { formNumber: { contains: s, mode: "insensitive" } },
-        { patient: { fullName: { contains: s, mode: "insensitive" } } },
-        { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
-      ];
-    }
-    return await prisma.dischargeForm.findMany({
-      where,
-      include: {
-        patient: true,
-        visit: true,
-        medicines: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
   }
 
   async getDischargeFormById(id: string) {
@@ -394,26 +418,38 @@ export class HospitalFormsRepository {
   }
 
   async getAdmissionForms(query?: { patientId?: string; search?: string }) {
-    const where: any = {};
-    if (query?.patientId) {
-      where.patientId = query.patientId;
+    try {
+      const where: any = {};
+      if (query?.patientId) {
+        const pObj = await prisma.patient.findFirst({
+          where: { OR: [{ id: query.patientId }, { legacyId: query.patientId }, { mrNumber: query.patientId }] },
+        });
+        where.patientId = pObj ? pObj.id : query.patientId;
+      }
+      if (query?.search) {
+        const s = query.search.trim();
+        where.OR = [
+          { formNumber: { contains: s, mode: "insensitive" } },
+          { patient: { fullName: { contains: s, mode: "insensitive" } } },
+          { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
+        ];
+      }
+      return await prisma.admissionForm.findMany({
+        where,
+        include: {
+          patient: true,
+          visit: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (err: any) {
+      console.warn("[HospitalFormsRepository] getAdmissionForms fallback:", err?.message);
+      return await prisma.admissionForm.findMany({
+        include: { patient: true, visit: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }).catch(() => []);
     }
-    if (query?.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { formNumber: { contains: s, mode: "insensitive" } },
-        { patient: { fullName: { contains: s, mode: "insensitive" } } },
-        { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
-      ];
-    }
-    return await prisma.admissionForm.findMany({
-      where,
-      include: {
-        patient: true,
-        visit: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
   }
 
   async getAdmissionFormById(id: string) {
@@ -431,7 +467,7 @@ export class HospitalFormsRepository {
       where: { id },
       data: {
         phcRegNumber: data.phcRegNumber,
-        dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : undefined,
+        dateOfAdmission: parseSafeDate(data.dateOfAdmission) ?? undefined,
         timeOfAdmission: data.timeOfAdmission,
         maritalStatus: data.maritalStatus,
         cnic: data.cnic,
@@ -439,7 +475,7 @@ export class HospitalFormsRepository {
         finalDiagnosis: data.finalDiagnosis,
         admittedThrough: data.admittedThrough,
         opdErMrNo: data.opdErMrNo,
-        dateOfDischargeRefer: data.dateOfDischargeRefer ? new Date(data.dateOfDischargeRefer) : undefined,
+        dateOfDischargeRefer: parseSafeDate(data.dateOfDischargeRefer) ?? undefined,
         timeOfDischargeRefer: data.timeOfDischargeRefer,
         consentName: data.consentName,
         consentRelation: data.consentRelation,
@@ -471,7 +507,7 @@ export class HospitalFormsRepository {
         formNumber,
         patientId,
         visitId,
-        operationDate: data.operationDate ? new Date(data.operationDate) : new Date(),
+        operationDate: parseSafeDate(data.operationDate) || new Date(),
         operationTime: data.operationTime || null,
         surgeonName: data.surgeonName || "",
         assistantTeamName: data.assistantTeamName || null,
@@ -488,7 +524,7 @@ export class HospitalFormsRepository {
         uneventfulDevelopment: data.uneventfulDevelopment || null,
         conditionAtEnd: data.conditionAtEnd || null,
         postOpOrders: data.postOpOrders || null,
-        signDate: data.signDate ? new Date(data.signDate) : null,
+        signDate: parseSafeDate(data.signDate),
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
         createdById,
@@ -501,27 +537,39 @@ export class HospitalFormsRepository {
   }
 
   async getOperationNotes(query?: { patientId?: string; search?: string }) {
-    const where: any = {};
-    if (query?.patientId) {
-      where.patientId = query.patientId;
+    try {
+      const where: any = {};
+      if (query?.patientId) {
+        const pObj = await prisma.patient.findFirst({
+          where: { OR: [{ id: query.patientId }, { legacyId: query.patientId }, { mrNumber: query.patientId }] },
+        });
+        where.patientId = pObj ? pObj.id : query.patientId;
+      }
+      if (query?.search) {
+        const s = query.search.trim();
+        where.OR = [
+          { formNumber: { contains: s, mode: "insensitive" } },
+          { surgeonName: { contains: s, mode: "insensitive" } },
+          { patient: { fullName: { contains: s, mode: "insensitive" } } },
+          { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
+        ];
+      }
+      return await prisma.operationNote.findMany({
+        where,
+        include: {
+          patient: true,
+          visit: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (err: any) {
+      console.warn("[HospitalFormsRepository] getOperationNotes fallback:", err?.message);
+      return await prisma.operationNote.findMany({
+        include: { patient: true, visit: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }).catch(() => []);
     }
-    if (query?.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { formNumber: { contains: s, mode: "insensitive" } },
-        { surgeonName: { contains: s, mode: "insensitive" } },
-        { patient: { fullName: { contains: s, mode: "insensitive" } } },
-        { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
-      ];
-    }
-    return await prisma.operationNote.findMany({
-      where,
-      include: {
-        patient: true,
-        visit: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
   }
 
   async getOperationNoteById(id: string) {
@@ -538,7 +586,7 @@ export class HospitalFormsRepository {
     return await prisma.operationNote.update({
       where: { id },
       data: {
-        operationDate: data.operationDate ? new Date(data.operationDate) : undefined,
+        operationDate: parseSafeDate(data.operationDate) ?? undefined,
         operationTime: data.operationTime,
         surgeonName: data.surgeonName,
         assistantTeamName: data.assistantTeamName,
@@ -555,7 +603,7 @@ export class HospitalFormsRepository {
         uneventfulDevelopment: data.uneventfulDevelopment,
         conditionAtEnd: data.conditionAtEnd,
         postOpOrders: data.postOpOrders,
-        signDate: data.signDate ? new Date(data.signDate) : undefined,
+        signDate: parseSafeDate(data.signDate) ?? undefined,
         signTime: data.signTime,
         status: data.status,
       },
@@ -584,11 +632,11 @@ export class HospitalFormsRepository {
         formNumber,
         patientId,
         visitId,
-        noteDate: data.noteDate ? new Date(data.noteDate) : new Date(),
+        noteDate: parseSafeDate(data.noteDate) || new Date(),
         noteTime: data.noteTime || null,
         notes: data.notes || "",
         doctorName: data.doctorName || "",
-        signDate: data.signDate ? new Date(data.signDate) : null,
+        signDate: parseSafeDate(data.signDate),
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
         createdById,
@@ -601,30 +649,42 @@ export class HospitalFormsRepository {
   }
 
   async getDoctorNotes(query?: { patientId?: string; doctorName?: string; search?: string }) {
-    const where: any = {};
-    if (query?.patientId) {
-      where.patientId = query.patientId;
+    try {
+      const where: any = {};
+      if (query?.patientId) {
+        const pObj = await prisma.patient.findFirst({
+          where: { OR: [{ id: query.patientId }, { legacyId: query.patientId }, { mrNumber: query.patientId }] },
+        });
+        where.patientId = pObj ? pObj.id : query.patientId;
+      }
+      if (query?.doctorName) {
+        where.doctorName = { contains: query.doctorName, mode: "insensitive" };
+      }
+      if (query?.search) {
+        const s = query.search.trim();
+        where.OR = [
+          { formNumber: { contains: s, mode: "insensitive" } },
+          { doctorName: { contains: s, mode: "insensitive" } },
+          { patient: { fullName: { contains: s, mode: "insensitive" } } },
+          { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
+        ];
+      }
+      return await prisma.doctorNote.findMany({
+        where,
+        include: {
+          patient: true,
+          visit: true,
+        },
+        orderBy: { createdAt: "desc" },
+      });
+    } catch (err: any) {
+      console.warn("[HospitalFormsRepository] getDoctorNotes fallback:", err?.message);
+      return await prisma.doctorNote.findMany({
+        include: { patient: true, visit: true },
+        orderBy: { createdAt: "desc" },
+        take: 100,
+      }).catch(() => []);
     }
-    if (query?.doctorName) {
-      where.doctorName = { contains: query.doctorName, mode: "insensitive" };
-    }
-    if (query?.search) {
-      const s = query.search.trim();
-      where.OR = [
-        { formNumber: { contains: s, mode: "insensitive" } },
-        { doctorName: { contains: s, mode: "insensitive" } },
-        { patient: { fullName: { contains: s, mode: "insensitive" } } },
-        { patient: { mrNumber: { contains: s, mode: "insensitive" } } },
-      ];
-    }
-    return await prisma.doctorNote.findMany({
-      where,
-      include: {
-        patient: true,
-        visit: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
   }
 
   async getDoctorNoteById(id: string) {

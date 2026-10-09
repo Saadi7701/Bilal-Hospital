@@ -14,7 +14,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Doctor Notes GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch doctor notes." },
+      { error: `Failed to fetch doctor notes: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Doctor Note POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create doctor note: ${error.message}` },
+      { error: `Failed to create doctor note: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }

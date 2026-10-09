@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Referral Forms GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch referral forms." },
+      { error: `Failed to fetch referral forms: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }
@@ -67,7 +67,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Referral Form POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create referral form: ${error.message}` },
+      { error: `Failed to create referral form: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }

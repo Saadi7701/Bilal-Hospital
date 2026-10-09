@@ -13,7 +13,7 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Discharge Forms GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch discharge forms." },
+      { error: `Failed to fetch discharge forms: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }
@@ -68,7 +68,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Discharge Form POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create discharge form: ${error.message}` },
+      { error: `Failed to create discharge form: ${error?.message || String(error)}` },
       { status: 500 }
     );
   }

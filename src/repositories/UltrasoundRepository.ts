@@ -26,9 +26,21 @@ export class UltrasoundRepository {
       if (anyConsultant) consultantId = anyConsultant.id;
     }
 
+    let finalOrderNumber = (orderData.orderNumber || "").trim();
+    if (!finalOrderNumber) {
+      finalOrderNumber = `US-${Date.now()}-${Math.floor(100 + Math.random() * 900)}`;
+    } else {
+      const existingOrder = await prisma.ultrasoundOrder.findUnique({
+        where: { orderNumber: finalOrderNumber },
+      });
+      if (existingOrder) {
+        finalOrderNumber = `${finalOrderNumber}-${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+    }
+
     const order = await prisma.ultrasoundOrder.create({
       data: {
-        orderNumber: orderData.orderNumber.trim(),
+        orderNumber: finalOrderNumber,
         patientId,
         patientName: orderData.patientName || (patientObj ? patientObj.fullName : "Patient"),
         mrNumber: orderData.mrNumber || (patientObj ? patientObj.mrNumber : "MR-0000"),

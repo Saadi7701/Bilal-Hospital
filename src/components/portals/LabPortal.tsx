@@ -334,7 +334,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       return;
     }
 
-    const newOrderNumber = `LAB-${Date.now().toString().slice(-6)}`;
+    const newOrderNumber = `LAB-${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
     const newOrder: LabOrderRecord = {
       id: `lab-${Date.now()}`,
       orderNumber: newOrderNumber,

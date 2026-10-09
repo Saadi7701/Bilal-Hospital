@@ -70,9 +70,15 @@ export async function POST(req: Request) {
     const body = await req.json();
 
     let orderNumber = body.orderNumber || body.labOrderNumber || `LAB-${Date.now().toString().slice(-6)}`;
-    if (!body.patientId || (!body.testName && (!body.tests || body.tests.length === 0))) {
+    if (!body.patientName && !body.mrNumber) {
       return NextResponse.json(
-        { error: "Patient ID and Test Name are required." },
+        { error: "Patient Name and MR Number are required." },
+        { status: 400 }
+      );
+    }
+    if (!body.testName && (!body.tests || body.tests.length === 0)) {
+      return NextResponse.json(
+        { error: "At least one test name is required." },
         { status: 400 }
       );
     }
@@ -82,14 +88,17 @@ export async function POST(req: Request) {
       ? body.tests.map((t: string, idx: number) => ({ testName: t, testCode: `TEST-${idx + 1}`, unitPrice: fee / body.tests.length }))
       : [{ testName: body.testName, testCode: body.testCode || "TEST-01", unitPrice: fee }];
 
+    // Skip fake visitIds generated on the frontend (vst-direct-xxx, pat-xxx etc)
+    const isFakeVisitId = !body.visitId || body.visitId.startsWith("vst-direct-") || body.visitId.startsWith("vst-");
+
     const newOrder = await labRepository.createLabOrder({
       orderNumber,
       patientId: body.patientId,
       patientName: body.patientName || "Patient",
       mrNumber: body.mrNumber || "MR-0000",
-      visitId: body.visitId || "",
-      consultantId: body.consultantId || "",
-      consultantName: body.consultantName || "Doctor",
+      visitId: isFakeVisitId ? null : body.visitId,
+      consultantId: body.consultantId || null,
+      consultantName: body.consultantName || "Direct Lab Request",
       testCategory: body.category || body.testCategory || "General Pathology",
       clinicalNotes: body.clinicalIndication || body.clinicalNotes || "",
       priority: body.priority === "URGENT" ? "URGENT" : "NORMAL",
@@ -97,22 +106,31 @@ export async function POST(req: Request) {
       totalFee: fee,
       requestDate: new Date(),
       items: testItems,
+      // Pass through for auto-upsert
+      age: body.age || 30,
+      gender: body.gender || "MALE",
+      cnic: body.cnic || null,
     });
 
     if (fee > 0) {
-      await cashRepository.createTransaction({
-        transactionNumber: `TXN-LAB-${Date.now().toString().slice(-6)}`,
-        transactionType: "INCOME",
-        category: "LAB_TEST",
-        department: "Laboratory",
-        amount: fee,
-        paymentMethod: body.paymentMethod || "CASH",
-        description: `Lab test fee for ${body.testName || (body.tests ? body.tests.join(', ') : 'Lab Order')}`,
-        patientId: newOrder.patientId,
-        visitId: newOrder.visitId,
-        createdById: newOrder.consultantId,
-        transactionDate: new Date(),
-      });
+      try {
+        await cashRepository.createTransaction({
+          transactionNumber: `TXN-LAB-${Date.now().toString().slice(-6)}`,
+          transactionType: "INCOME",
+          category: "LAB_TEST",
+          department: "Laboratory",
+          amount: fee,
+          paymentMethod: body.paymentMethod || "CASH",
+          description: `Lab test fee for ${body.testName || (body.tests ? body.tests.join(', ') : 'Lab Order')}`,
+          patientId: newOrder.patientId,
+          visitId: newOrder.visitId || null,
+          createdById: newOrder.consultantId || "",
+          transactionDate: new Date(),
+        });
+      } catch (cashErr: any) {
+        // Non-fatal: log but don't fail the order creation
+        console.warn("[Lab Orders POST] Cash transaction failed (non-fatal):", cashErr?.message);
+      }
     }
 
     return NextResponse.json(
@@ -122,7 +140,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Lab Orders API POST Error]:", error);
     return NextResponse.json(
-      { error: "Failed to create lab order." },
+      { error: `Failed to create lab order: ${error?.message || error}` },
       { status: 500 }
     );
   }

@@ -3,12 +3,31 @@ import { prisma } from "../lib/prisma";
 export class LabRepository {
   async createLabOrder(orderData: any): Promise<any> {
     let patientId = orderData.patientId ? orderData.patientId.toString() : "";
-    let visitId: string | null = orderData.visitId ? orderData.visitId.toString() : null;
+    let visitId: string | null = orderData.visitId || null;
     let consultantId: string | null = orderData.consultantId ? orderData.consultantId.toString() : null;
 
-    const patientObj = await prisma.patient.findFirst({
+    // Look up patient by ID first, then fall back to MR number
+    let patientObj = await prisma.patient.findFirst({
       where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: orderData.mrNumber || patientId }] },
     });
+
+    // If still not found (e.g. fake frontend ID like "pat-xxx"), upsert by MR number
+    if (!patientObj && orderData.mrNumber) {
+      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
+      patientObj = await prisma.patient.upsert({
+        where: { mrNumber: orderData.mrNumber },
+        update: {},
+        create: {
+          mrNumber: orderData.mrNumber,
+          fullName: orderData.patientName || "Patient",
+          age: Number(orderData.age) || 30,
+          gender: (orderData.gender || "MALE").toUpperCase(),
+          phone: "0000000000",
+          createdBy: adminUser?.id || "",
+        },
+      });
+    }
+
     if (patientObj) patientId = patientObj.id;
 
     if (visitId) {

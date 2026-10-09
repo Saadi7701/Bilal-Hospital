@@ -3,12 +3,37 @@ import { prisma } from "@/lib/prisma";
 import { prescriptionRepository } from "@/repositories/PrescriptionRepository";
 import { getPKTDateRange } from "@/lib/dateUtils";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const patientId = searchParams.get("patientId");
     const period = searchParams.get("period") || "today"; // 'today' | 'all'
     const pktDateRange = getPKTDateRange(searchParams.get("date"));
+
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.prescription.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/prescriptions",
+        dbStatus,
+        dbError,
+        prescriptionCount: count,
+        query: { patientId, period },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     let prescriptions;
     if (patientId) {
@@ -40,11 +65,15 @@ export async function GET(req: Request) {
       prescriptions = records.map((p) => ({ ...p, _id: p.id }));
     }
 
-    return NextResponse.json({ prescriptions }, { status: 200 });
+    return NextResponse.json({ prescriptions: prescriptions || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Prescriptions API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch prescriptions." },
+      {
+        error: `Failed to fetch prescriptions: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -90,7 +119,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Prescriptions API POST Error]:", error);
     return NextResponse.json(
-      { error: "Failed to create prescription." },
+      {
+        error: `Failed to create prescription: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -114,8 +147,13 @@ export async function PUT(req: Request) {
   } catch (error: any) {
     console.error("[Prescriptions API PUT Error]:", error);
     return NextResponse.json(
-      { error: "Failed to update prescription status." },
+      {
+        error: `Failed to update prescription status: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

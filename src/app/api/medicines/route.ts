@@ -1,14 +1,45 @@
 import { NextResponse } from "next/server";
 import { medicineRepository } from "@/repositories/MedicineRepository";
+import { prisma } from "@/lib/prisma";
 
-export async function GET() {
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+export async function GET(req: Request) {
   try {
+    const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
+
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.medicine.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/medicines",
+        dbStatus,
+        dbError,
+        medicineCount: count,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const medicines = await medicineRepository.findAllMedicines();
-    return NextResponse.json({ medicines }, { status: 200 });
+    return NextResponse.json({ medicines: medicines || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Medicines API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch pharmacy medicines." },
+      {
+        error: `Failed to fetch pharmacy medicines: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -51,7 +82,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Medicines API POST Error]:", error);
     return NextResponse.json(
-      { error: "Failed to create medicine record." },
+      {
+        error: `Failed to create medicine record: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -75,8 +110,13 @@ export async function PUT(req: Request) {
   } catch (error: any) {
     console.error("[Medicines API PUT Error]:", error);
     return NextResponse.json(
-      { error: "Failed to update inventory stock." },
+      {
+        error: `Failed to update inventory stock: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

@@ -1,19 +1,49 @@
 import { NextResponse } from "next/server";
 import { hospitalFormsRepository } from "@/repositories/HospitalFormsRepository";
 import { patientFileArchiveService } from "@/lib/patientFileArchiveService";
+import { prisma } from "@/lib/prisma";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const patientId = searchParams.get("patientId") || undefined;
     const search = searchParams.get("q") || searchParams.get("search") || undefined;
 
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.referralForm.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/forms/referral",
+        dbStatus,
+        dbError,
+        referralFormCount: count,
+        query: { patientId, search },
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const forms = await hospitalFormsRepository.getReferralForms({ patientId, search });
-    return NextResponse.json({ forms }, { status: 200 });
+    return NextResponse.json({ forms: forms || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Referral Forms GET Error]:", error);
     return NextResponse.json(
-      { error: `Failed to fetch referral forms: ${error?.message || String(error)}` },
+      {
+        error: `Failed to fetch referral forms: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -67,9 +97,14 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Referral Form POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create referral form: ${error?.message || String(error)}` },
+      {
+        error: `Failed to create referral form: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+
 

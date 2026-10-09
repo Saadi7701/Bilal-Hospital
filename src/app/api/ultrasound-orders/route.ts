@@ -4,12 +4,37 @@ import { ultrasoundRepository } from "@/repositories/UltrasoundRepository";
 import { cashRepository } from "@/repositories/CashRepository";
 import { getPKTDateRange } from "@/lib/dateUtils";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const patientId = searchParams.get("patientId");
     const period = searchParams.get("period") || "today"; // 'today' | 'all'
     const pktDateRange = getPKTDateRange(searchParams.get("date"));
+
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.ultrasoundOrder.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/ultrasound-orders",
+        dbStatus,
+        dbError,
+        ultrasoundOrderCount: count,
+        query: { patientId, period },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     let orders;
     if (patientId) {
@@ -43,11 +68,15 @@ export async function GET(req: Request) {
       orders = records.map((o) => ({ ...o, _id: o.id }));
     }
 
-    return NextResponse.json({ ultrasoundOrders: orders }, { status: 200 });
+    return NextResponse.json({ ultrasoundOrders: orders || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Ultrasound API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch ultrasound orders." },
+      {
+        error: `Failed to fetch ultrasound orders: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -106,7 +135,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Ultrasound API POST Error]:", error);
     return NextResponse.json(
-      { error: "Failed to create ultrasound order." },
+      {
+        error: `Failed to create ultrasound order: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -143,8 +176,13 @@ export async function PUT(req: Request) {
   } catch (error: any) {
     console.error("[Ultrasound API PUT Error]:", error);
     return NextResponse.json(
-      { error: "Failed to update ultrasound order." },
+      {
+        error: `Failed to update ultrasound order: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

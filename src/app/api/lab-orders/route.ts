@@ -4,12 +4,37 @@ import { labRepository } from "@/repositories/LabRepository";
 import { cashRepository } from "@/repositories/CashRepository";
 import { getPKTDateRange } from "@/lib/dateUtils";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const patientId = searchParams.get("patientId");
     const period = searchParams.get("period") || "today"; // 'today' | 'all'
     const pktDateRange = getPKTDateRange(searchParams.get("date"));
+
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.labOrder.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/lab-orders",
+        dbStatus,
+        dbError,
+        labOrderCount: count,
+        query: { patientId, period },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     let orders;
     if (patientId) {
@@ -55,11 +80,15 @@ export async function GET(req: Request) {
       }));
     }
 
-    return NextResponse.json({ labOrders: orders }, { status: 200 });
+    return NextResponse.json({ labOrders: orders || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Lab Orders API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch lab orders." },
+      {
+        error: `Failed to fetch lab orders: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -140,7 +169,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Lab Orders API POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create lab order: ${error?.message || error}` },
+      {
+        error: `Failed to create lab order: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -216,8 +249,13 @@ export async function PUT(req: Request) {
   } catch (error: any) {
     console.error("[Lab Orders API PUT Error]:", error);
     return NextResponse.json(
-      { error: "Failed to update lab order." },
+      {
+        error: `Failed to update lab order: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

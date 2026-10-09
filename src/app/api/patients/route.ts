@@ -2,17 +2,46 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { patientRepository } from "@/repositories/PatientRepository";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const query = searchParams.get("q") || "";
 
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.patient.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/patients",
+        dbStatus,
+        dbError,
+        patientCount: count,
+        query,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
     const patients = await patientRepository.searchPatients(query);
-    return NextResponse.json({ patients }, { status: 200 });
+    return NextResponse.json({ patients: patients || [] }, { status: 200 });
   } catch (error: any) {
     console.error("[Patients API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch patients records." },
+      {
+        error: `Failed to fetch patients records: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -60,8 +89,13 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Patients API POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create patient record: ${error.message}` },
+      {
+        error: `Failed to create patient record: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

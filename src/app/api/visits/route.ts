@@ -4,13 +4,38 @@ import { visitRepository } from "@/repositories/VisitRepository";
 import { cashRepository } from "@/repositories/CashRepository";
 import { getPKTDateRange } from "@/lib/dateUtils";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
+    const debug = searchParams.get("debug") === "1" || searchParams.get("debug") === "true";
     const consultantId = searchParams.get("consultantId");
     const status = searchParams.get("status");
     const period = searchParams.get("period") || "today"; // 'today' | 'all'
     const pktDateRange = getPKTDateRange(searchParams.get("date"));
+
+    if (debug) {
+      let dbStatus = "connected";
+      let dbError: string | null = null;
+      let count = 0;
+      try {
+        count = await prisma.patientVisit.count();
+      } catch (e: any) {
+        dbStatus = "error";
+        dbError = e?.message || String(e);
+      }
+      return NextResponse.json({
+        status: "debug_ok",
+        route: "/api/visits",
+        dbStatus,
+        dbError,
+        visitCount: count,
+        query: { consultantId, status, period },
+        timestamp: new Date().toISOString(),
+      });
+    }
 
     let whereClause: any = {};
 
@@ -51,7 +76,11 @@ export async function GET(req: Request) {
   } catch (error: any) {
     console.error("[Visits API GET Error]:", error);
     return NextResponse.json(
-      { error: "Failed to fetch patient visits." },
+      {
+        error: `Failed to fetch patient visits: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -122,7 +151,11 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("[Visits API POST Error]:", error);
     return NextResponse.json(
-      { error: `Failed to create patient visit: ${error.message}` },
+      {
+        error: `Failed to create patient visit: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
@@ -146,8 +179,13 @@ export async function PUT(req: Request) {
   } catch (error: any) {
     console.error("[Visits API PUT Error]:", error);
     return NextResponse.json(
-      { error: "Failed to update visit status." },
+      {
+        error: `Failed to update visit status: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+        timestamp: new Date().toISOString(),
+      },
       { status: 500 }
     );
   }
 }
+

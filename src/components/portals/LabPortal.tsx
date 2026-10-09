@@ -49,6 +49,7 @@ import {
 } from "../../lib/labTemplateRegistry";
 import { labTemplateEngine } from "../../lib/labTemplateEngine";
 import { labPdfReportGenerator } from "../../lib/pdfReportGenerator";
+import { toPKTDateString } from "../../lib/dateUtils";
 
 interface LabPortalProps {
   activeTab: string;
@@ -129,6 +130,50 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       return [];
     }
   });
+
+  // Full historical lab orders (all periods) for archive tab
+  const [allLabOrders, setAllLabOrders] = useState<LabOrderRecord[]>([]);
+
+  // Fetch all orders when archive tab is opened
+  useEffect(() => {
+    if (!showArchivedTab) return;
+    fetch("/api/lab-orders?period=all")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.labOrders && Array.isArray(data.labOrders)) {
+          setAllLabOrders(
+            data.labOrders.map((l: any) => ({
+              id: l._id || l.id,
+              orderNumber: l.orderNumber || `LAB-${l._id}`,
+              patientId: l.patientId,
+              patientName: l.patientName || "",
+              mrNumber: l.mrNumber || "",
+              cnic: l.cnic || (l.patient ? l.patient.cnic : ""),
+              age: l.age || (l.patient ? l.patient.age : 35),
+              gender: l.gender || (l.patient ? l.patient.gender : "Male"),
+              visitId: l.visitId || "",
+              consultantId: l.consultantId || "",
+              consultantName: l.consultantName || "Doctor",
+              testCategory: l.testCategory || l.category || "General Pathology",
+              tests: l.items && l.items.length > 0 ? l.items.map((item: any) => item.testName) : [l.testName || "Lab Test"],
+              totalFee: l.totalFee || l.fee || 0,
+              priority: l.priority || "NORMAL",
+              status: l.status || "ORDERED",
+              requestDate: toPKTDateString(l.requestDate),
+              currentVersion: l.currentVersion || 1,
+              resultsV1: l.resultsV1,
+              resultsV2: l.resultsV2,
+              revisionReason: l.revisionReason,
+              revisionComment: l.revisionComment,
+              attachedPdfName: l.attachedPdfName,
+              attachedPdfUrl: l.attachedPdfUrl,
+              attachedImageBase64: l.attachedImageBase64,
+            }))
+          );
+        }
+      })
+      .catch(() => {});
+  }, [showArchivedTab]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -345,15 +390,20 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   };
 
   // Filter orders by search query, date filter, and archive status
-  const filteredOrders = labOrders.filter((l) => {
+  // Use PKT (Asia/Karachi) date strings to avoid UTC midnight mismatch
+  const todayPKT = toPKTDateString(new Date());
+  const yesterdayPKT = toPKTDateString(new Date(Date.now() - 86400000));
+
+  // When archive tab is active, use the full historical list; otherwise today's prop
+  const sourceOrders = showArchivedTab ? allLabOrders : labOrders;
+
+  const filteredOrders = sourceOrders.filter((l) => {
     const isArchived = archivedOrderIds.includes(l.id);
     if (showArchivedTab ? !isArchived : isArchived) return false;
 
     if (selectedLogDate !== "ALL") {
-      const todayStr = new Date().toISOString().split("T")[0];
-      const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
-      if (selectedLogDate === "TODAY" && l.requestDate !== todayStr) return false;
-      if (selectedLogDate === "YESTERDAY" && l.requestDate !== yesterdayStr) return false;
+      if (selectedLogDate === "TODAY" && l.requestDate !== todayPKT) return false;
+      if (selectedLogDate === "YESTERDAY" && l.requestDate !== yesterdayPKT) return false;
       if (selectedLogDate !== "TODAY" && selectedLogDate !== "YESTERDAY" && l.requestDate !== selectedLogDate) return false;
     }
 
@@ -369,15 +419,13 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
   // Download Daily ZIP Archive Handler
   const handleDownloadDailyZip = async () => {
-    const todayStr = new Date().toISOString().split("T")[0];
-    const yesterdayStr = new Date(Date.now() - 86400000).toISOString().split("T")[0];
 
     const targetOrders = labOrders.filter((o) => {
       const isCompleted = o.status === "ACCEPTED" || o.status === "SUBMITTED_TO_CONSULTANT" || Boolean(o.resultsV1);
       const notArchived = !archivedOrderIds.includes(o.id);
       let matchesDate = true;
-      if (selectedLogDate === "TODAY") matchesDate = o.requestDate === todayStr;
-      else if (selectedLogDate === "YESTERDAY") matchesDate = o.requestDate === yesterdayStr;
+      if (selectedLogDate === "TODAY") matchesDate = o.requestDate === todayPKT;
+      else if (selectedLogDate === "YESTERDAY") matchesDate = o.requestDate === yesterdayPKT;
       else if (selectedLogDate !== "ALL") matchesDate = o.requestDate === selectedLogDate;
       return isCompleted && notArchived && matchesDate;
     });
@@ -388,7 +436,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     }
 
     const zip = new JSZip();
-    const dateTag = selectedLogDate === "ALL" || selectedLogDate === "TODAY" ? todayStr : selectedLogDate;
+    const dateTag = selectedLogDate === "ALL" || selectedLogDate === "TODAY" ? todayPKT : selectedLogDate;
     const folderName = `BILAL_HOSPITAL_LAB_REPORTS_${dateTag}`;
     const folder = zip.folder(folderName);
 

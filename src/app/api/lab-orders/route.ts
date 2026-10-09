@@ -26,6 +26,12 @@ export async function GET(req: Request) {
               },
             },
             {
+              updatedAt: {
+                gte: pktDateRange.startOfPKTDay,
+                lt: pktDateRange.startOfTomorrowPKTDay,
+              },
+            },
+            {
               status: {
                 in: ["ORDERED", "SAMPLE_COLLECTED", "PROCESSING", "REVISION_REQUESTED"],
               },

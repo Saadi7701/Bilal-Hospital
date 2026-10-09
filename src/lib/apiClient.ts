@@ -7,6 +7,7 @@ import {
   MedicineRecord,
   CashTransactionRecord,
 } from "./mockDataStore";
+import { toPKTDateString } from "./dateUtils";
 
 export async function fetchPatientsFromApi(): Promise<PatientRecord[]> {
   try {
@@ -136,9 +137,9 @@ export async function createVisitApi(visit: VisitRecord): Promise<boolean> {
   }
 }
 
-export async function fetchLabOrdersFromApi(): Promise<LabOrderRecord[]> {
+export async function fetchLabOrdersFromApi(period: string = "today"): Promise<LabOrderRecord[]> {
   try {
-    const res = await fetch("/api/lab-orders");
+    const res = await fetch(`/api/lab-orders?period=${period}`);
     if (!res.ok) throw new Error(`API returned status ${res.status}`);
     const data = await res.json();
     if (data.labOrders && Array.isArray(data.labOrders)) {
@@ -159,9 +160,7 @@ export async function fetchLabOrdersFromApi(): Promise<LabOrderRecord[]> {
         totalFee: l.totalFee || l.fee || 0,
         priority: l.priority || "NORMAL",
         status: l.status || "ORDERED",
-        requestDate: l.requestDate
-          ? new Date(l.requestDate).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
+        requestDate: toPKTDateString(l.requestDate),
         currentVersion: l.currentVersion || 1,
         resultsV1: l.resultsV1,
         resultsV2: l.resultsV2,

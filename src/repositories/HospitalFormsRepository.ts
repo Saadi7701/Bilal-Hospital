@@ -1,18 +1,78 @@
 import { prisma } from "../lib/prisma";
 
 export class HospitalFormsRepository {
+  private async resolveFormEntities(data: any) {
+    let patientId = data.patientId ? data.patientId.toString() : "";
+    let visitId: string | null = data.visitId ? data.visitId.toString() : null;
+    let createdById: string | null = data.createdById ? data.createdById.toString() : null;
+
+    let patientObj = await prisma.patient.findFirst({
+      where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: data.mrNumber || patientId }] },
+    });
+
+    if (!patientObj && (data.mrNumber || data.patientName || data.patient)) {
+      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
+      const pName = data.patientName || (data.patient ? data.patient.fullName : "Patient");
+      const pMrn = data.mrNumber || (data.patient ? data.patient.mrNumber : `MR-${Date.now()}`);
+      const pPhone = data.phone || (data.patient ? data.patient.phone : "0000000000");
+      const pCnic = data.cnic || (data.patient ? data.patient.cnic : null);
+
+      patientObj = await prisma.patient.upsert({
+        where: { mrNumber: pMrn },
+        update: {},
+        create: {
+          mrNumber: pMrn,
+          fullName: pName,
+          age: Number(data.age || (data.patient ? data.patient.age : 30)) || 30,
+          gender: (data.gender || (data.patient ? data.patient.gender : "MALE") || "MALE").toUpperCase(),
+          phone: pPhone,
+          cnic: pCnic,
+          createdBy: adminUser?.id || "",
+        },
+      });
+    }
+
+    if (patientObj) {
+      patientId = patientObj.id;
+    }
+
+    if (visitId) {
+      const visitObj = await prisma.patientVisit.findFirst({
+        where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
+      });
+      visitId = visitObj ? visitObj.id : null;
+    }
+
+    if (createdById) {
+      const userObj = await prisma.user.findFirst({
+        where: { OR: [{ id: createdById }, { legacyId: createdById }, { username: createdById }] },
+      });
+      createdById = userObj ? userObj.id : null;
+    }
+
+    return { patientId, visitId, createdById };
+  }
+
   // --- REFERRAL FORM ---
   async createReferralForm(data: any) {
-    const count = await prisma.referralForm.count();
-    const formNumber = data.formNumber || `REF-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const { patientId, visitId, createdById } = await this.resolveFormEntities(data);
+    let formNumber = (data.formNumber || "").trim();
+    if (!formNumber) {
+      const count = await prisma.referralForm.count();
+      formNumber = `REF-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    }
+    const existing = await prisma.referralForm.findUnique({ where: { formNumber } });
+    if (existing) {
+      formNumber = `REF-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    }
 
     const medicines = Array.isArray(data.medicines) ? data.medicines : [];
 
     return await prisma.referralForm.create({
       data: {
         formNumber,
-        patientId: data.patientId,
-        visitId: data.visitId || null,
+        patientId,
+        visitId,
         formDate: data.formDate ? new Date(data.formDate) : new Date(),
         dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : null,
         presentingComplaint: data.presentingComplaint || null,
@@ -135,16 +195,24 @@ export class HospitalFormsRepository {
 
   // --- DISCHARGE FORM ---
   async createDischargeForm(data: any) {
-    const count = await prisma.dischargeForm.count();
-    const formNumber = data.formNumber || `DIS-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const { patientId, visitId, createdById } = await this.resolveFormEntities(data);
+    let formNumber = (data.formNumber || "").trim();
+    if (!formNumber) {
+      const count = await prisma.dischargeForm.count();
+      formNumber = `DIS-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    }
+    const existing = await prisma.dischargeForm.findUnique({ where: { formNumber } });
+    if (existing) {
+      formNumber = `DIS-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    }
 
     const medicines = Array.isArray(data.medicines) ? data.medicines : [];
 
     return await prisma.dischargeForm.create({
       data: {
         formNumber,
-        patientId: data.patientId,
-        visitId: data.visitId || null,
+        patientId,
+        visitId,
         formDate: data.formDate ? new Date(data.formDate) : new Date(),
         dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : null,
         presentingComplaint: data.presentingComplaint || null,
@@ -164,7 +232,7 @@ export class HospitalFormsRepository {
         signDate: data.signDate ? new Date(data.signDate) : null,
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
-        createdById: data.createdById || null,
+        createdById,
         medicines: {
           create: medicines.map((m: any, index: number) => ({
             srNo: index + 1,
@@ -274,14 +342,22 @@ export class HospitalFormsRepository {
 
   // --- ADMISSION FORM ---
   async createAdmissionForm(data: any) {
-    const count = await prisma.admissionForm.count();
-    const formNumber = data.formNumber || `ADM-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const { patientId, visitId, createdById } = await this.resolveFormEntities(data);
+    let formNumber = (data.formNumber || "").trim();
+    if (!formNumber) {
+      const count = await prisma.admissionForm.count();
+      formNumber = `ADM-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    }
+    const existing = await prisma.admissionForm.findUnique({ where: { formNumber } });
+    if (existing) {
+      formNumber = `ADM-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    }
 
     return await prisma.admissionForm.create({
       data: {
         formNumber,
-        patientId: data.patientId,
-        visitId: data.visitId || null,
+        patientId,
+        visitId,
         phcRegNumber: data.phcRegNumber || null,
         dateOfAdmission: data.dateOfAdmission ? new Date(data.dateOfAdmission) : new Date(),
         timeOfAdmission: data.timeOfAdmission || null,
@@ -297,7 +373,7 @@ export class HospitalFormsRepository {
         consentRelation: data.consentRelation || null,
         consentSigned: data.consentSigned ?? true,
         status: data.status || "FINALIZED",
-        createdById: data.createdById || null,
+        createdById,
       },
       include: {
         patient: true,
@@ -368,14 +444,22 @@ export class HospitalFormsRepository {
 
   // --- OPERATION NOTES ---
   async createOperationNote(data: any) {
-    const count = await prisma.operationNote.count();
-    const formNumber = data.formNumber || `OP-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const { patientId, visitId, createdById } = await this.resolveFormEntities(data);
+    let formNumber = (data.formNumber || "").trim();
+    if (!formNumber) {
+      const count = await prisma.operationNote.count();
+      formNumber = `OP-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    }
+    const existing = await prisma.operationNote.findUnique({ where: { formNumber } });
+    if (existing) {
+      formNumber = `OP-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    }
 
     return await prisma.operationNote.create({
       data: {
         formNumber,
-        patientId: data.patientId,
-        visitId: data.visitId || null,
+        patientId,
+        visitId,
         operationDate: data.operationDate ? new Date(data.operationDate) : new Date(),
         operationTime: data.operationTime || null,
         surgeonName: data.surgeonName || "",
@@ -396,7 +480,7 @@ export class HospitalFormsRepository {
         signDate: data.signDate ? new Date(data.signDate) : null,
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
-        createdById: data.createdById || null,
+        createdById,
       },
       include: {
         patient: true,
@@ -473,14 +557,22 @@ export class HospitalFormsRepository {
 
   // --- DOCTOR NOTES ---
   async createDoctorNote(data: any) {
-    const count = await prisma.doctorNote.count();
-    const formNumber = data.formNumber || `DN-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    const { patientId, visitId, createdById } = await this.resolveFormEntities(data);
+    let formNumber = (data.formNumber || "").trim();
+    if (!formNumber) {
+      const count = await prisma.doctorNote.count();
+      formNumber = `DN-${new Date().getFullYear()}-${String(count + 1).padStart(5, "0")}`;
+    }
+    const existing = await prisma.doctorNote.findUnique({ where: { formNumber } });
+    if (existing) {
+      formNumber = `DN-${new Date().getFullYear()}-${Date.now().toString().slice(-5)}`;
+    }
 
     return await prisma.doctorNote.create({
       data: {
         formNumber,
-        patientId: data.patientId,
-        visitId: data.visitId || null,
+        patientId,
+        visitId,
         noteDate: data.noteDate ? new Date(data.noteDate) : new Date(),
         noteTime: data.noteTime || null,
         notes: data.notes || "",
@@ -488,7 +580,7 @@ export class HospitalFormsRepository {
         signDate: data.signDate ? new Date(data.signDate) : null,
         signTime: data.signTime || null,
         status: data.status || "FINALIZED",
-        createdById: data.createdById || null,
+        createdById,
       },
       include: {
         patient: true,

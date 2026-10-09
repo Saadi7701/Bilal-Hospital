@@ -501,6 +501,15 @@ export async function fetchReferralFormsFromApi(query?: string): Promise<any[]> 
   }
 }
 
+async function parseJsonResponse(res: Response) {
+  const text = await res.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { error: `Server error (${res.status}): unexpected response from server` };
+  }
+}
+
 export async function createReferralFormApi(formData: any): Promise<{ success: boolean; form?: any; error?: string }> {
   try {
     const res = await fetch("/api/forms/referral", {
@@ -508,8 +517,8 @@ export async function createReferralFormApi(formData: any): Promise<{ success: b
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
+    const data = await parseJsonResponse(res);
+    if (!res.ok) return { success: false, error: data.error || "Failed to create referral form" };
     return { success: true, form: data.form };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -521,7 +530,7 @@ export async function fetchDischargeFormsFromApi(query?: string): Promise<any[]>
     const url = query ? `/api/forms/discharge?q=${encodeURIComponent(query)}` : "/api/forms/discharge";
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Status ${res.status}`);
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     return data.forms || [];
   } catch (err: any) {
     console.warn("[API Client] Error fetching discharge forms:", err.message);
@@ -536,8 +545,8 @@ export async function createDischargeFormApi(formData: any): Promise<{ success: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
+    const data = await parseJsonResponse(res);
+    if (!res.ok) return { success: false, error: data.error || "Failed to create discharge form" };
     return { success: true, form: data.form };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -549,7 +558,7 @@ export async function fetchAdmissionFormsFromApi(query?: string): Promise<any[]>
     const url = query ? `/api/forms/admission?q=${encodeURIComponent(query)}` : "/api/forms/admission";
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Status ${res.status}`);
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     return data.forms || [];
   } catch (err: any) {
     console.warn("[API Client] Error fetching admission forms:", err.message);
@@ -564,8 +573,8 @@ export async function createAdmissionFormApi(formData: any): Promise<{ success: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
+    const data = await parseJsonResponse(res);
+    if (!res.ok) return { success: false, error: data.error || "Failed to create admission form" };
     return { success: true, form: data.form };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -577,7 +586,7 @@ export async function fetchOperationNotesFromApi(query?: string): Promise<any[]>
     const url = query ? `/api/forms/operation-notes?q=${encodeURIComponent(query)}` : "/api/forms/operation-notes";
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Status ${res.status}`);
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     return data.forms || [];
   } catch (err: any) {
     console.warn("[API Client] Error fetching operation notes:", err.message);
@@ -592,8 +601,8 @@ export async function createOperationNoteApi(formData: any): Promise<{ success: 
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
+    const data = await parseJsonResponse(res);
+    if (!res.ok) return { success: false, error: data.error || "Failed to create operation note" };
     return { success: true, form: data.form };
   } catch (err: any) {
     return { success: false, error: err.message };
@@ -605,7 +614,7 @@ export async function fetchDoctorNotesFromApi(query?: string): Promise<any[]> {
     const url = query ? `/api/forms/doctor-notes?q=${encodeURIComponent(query)}` : "/api/forms/doctor-notes";
     const res = await fetch(url);
     if (!res.ok) throw new Error(`Status ${res.status}`);
-    const data = await res.json();
+    const data = await parseJsonResponse(res);
     return data.forms || [];
   } catch (err: any) {
     console.warn("[API Client] Error fetching doctor notes:", err.message);
@@ -620,8 +629,8 @@ export async function createDoctorNoteApi(formData: any): Promise<{ success: boo
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(formData),
     });
-    const data = await res.json();
-    if (!res.ok) return { success: false, error: data.error };
+    const data = await parseJsonResponse(res);
+    if (!res.ok) return { success: false, error: data.error || "Failed to create doctor note" };
     return { success: true, form: data.form };
   } catch (err: any) {
     return { success: false, error: err.message };

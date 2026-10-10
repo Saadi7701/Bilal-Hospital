@@ -25,6 +25,7 @@ import {
   Filter,
   ShieldCheck,
   FileSpreadsheet,
+  FlaskConical,
 } from "lucide-react";
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
@@ -34,10 +35,54 @@ import {
   VisitRecord,
   AdmissionRecord,
   CashTransactionRecord,
+  LabOrderRecord,
 } from "../../lib/mockDataStore";
+import {
+  DEFAULT_LAB_TEMPLATES,
+  LabTemplateDef,
+} from "../../lib/labTemplateRegistry";
+import { createLabOrderApi } from "../../lib/apiClient";
 import { HospitalFormsManager } from "../forms/HospitalFormsManager";
 import { PatientFileManager } from "./PatientFileManager";
 import { HospitalFormPrintView } from "../forms/HospitalFormPrintView";
+
+const LAB_TEST_PRICES: Record<string, number> = {
+  CBC: 800,
+  BLOOD_CP: 800,
+  LFT: 1800,
+  RFT: 1500,
+  LIPID: 1500,
+  URINE_RE: 400,
+  STOOL_RE: 400,
+  WIDAL: 600,
+  SEMEN: 900,
+  BLOOD_GROUP: 300,
+  BSF: 200,
+  BSR: 200,
+  BSF_LIPID: 1600,
+  URIC_LIPID: 1800,
+  HBA1C: 1200,
+  CALCIUM: 500,
+  ALT: 500,
+  HPYLORI: 1000,
+  HBSAG_HCV: 1200,
+  MP: 500,
+  PREGNANCY: 400,
+};
+
+const POPULAR_LAB_CODES = [
+  "CBC",
+  "URINE_RE",
+  "LFT",
+  "RFT",
+  "LIPID",
+  "BLOOD_GROUP",
+  "BSR",
+  "BSF",
+  "WIDAL",
+  "HBA1C",
+  "HBSAG_HCV",
+];
 
 interface ReceptionistPortalProps {
   activeTab: string;
@@ -105,10 +150,12 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
   const [gyneWardBed, setGyneWardBed] = useState("Gyne Ward 104 / Bed 02");
 
   // Direct Lab / Ultrasound Selections
-  const [selectedLabTests, setSelectedLabTests] = useState<string[]>([
-    "Complete Blood Count (CBC)",
-    "Lipid Profile",
+  const [selectedLabTestCodes, setSelectedLabTestCodes] = useState<string[]>([
+    "CBC",
+    "URINE_RE",
   ]);
+  const [labTestSearchQuery, setLabTestSearchQuery] = useState("");
+  const [labCategoryFilter, setLabCategoryFilter] = useState("ALL");
   const [selectedUsExam, setSelectedUsExam] = useState("Pelvic / Whole Abdomen Scan");
 
   // Fee & Payment State
@@ -180,6 +227,37 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
     { id: "doc-3", name: "Dr. Kamran Raza (DMRD)", dept: "Sonology / Ultrasound", fee: 2000 },
     { id: "doc-4", name: "Dr. Tariq Mahmood (M.Phil)", dept: "Pathology Laboratory", fee: 1500 },
   ];
+
+  // Filtered Lab Templates for Receptionist Direct Selection
+  const filteredLabTemplates = DEFAULT_LAB_TEMPLATES.filter((tmpl) => {
+    const matchesCat =
+      labCategoryFilter === "ALL" ||
+      tmpl.category.toUpperCase() === labCategoryFilter.toUpperCase();
+    if (!labTestSearchQuery.trim()) return matchesCat;
+    const q = labTestSearchQuery.toLowerCase();
+    return (
+      matchesCat &&
+      (tmpl.code.toLowerCase().includes(q) ||
+        tmpl.name.toLowerCase().includes(q) ||
+        (tmpl.fullForm && tmpl.fullForm.toLowerCase().includes(q)) ||
+        tmpl.parameters.some((p) => p.name.toLowerCase().includes(q)))
+    );
+  });
+
+  const toggleLabTest = (code: string) => {
+    let nextCodes: string[];
+    if (selectedLabTestCodes.includes(code)) {
+      nextCodes = selectedLabTestCodes.filter((c) => c !== code);
+    } else {
+      nextCodes = [...selectedLabTestCodes, code];
+    }
+    setSelectedLabTestCodes(nextCodes);
+    const newTotal = nextCodes.reduce(
+      (sum, c) => sum + (LAB_TEST_PRICES[c] || 800),
+      0
+    );
+    setVisitFee(newTotal);
+  };
 
   // Filter Patients for search
   const filteredPatients = patients.filter((p) => {
@@ -362,10 +440,20 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       onAddVisit(newVisit, newLedgerTxn);
       setPrintedReceipt(newVisit);
       alert(`Patient admitted into ${isOt ? "OT" : "Gyne Ward"}! Shown in OT & Gyne Inpatient Tracker.`);
-    } else {
-      // Direct Lab or Ultrasound
-      const isLab = destinationType === "LAB";
-      const serviceFee = visitFee > 0 ? visitFee : isLab ? selectedLabTests.length * 900 : 3000;
+    } else if (destinationType === "LAB") {
+      // Direct Laboratory Test Request
+      const selectedTemplates = selectedLabTestCodes
+        .map((code) => DEFAULT_LAB_TEMPLATES.find((t) => t.code === code))
+        .filter(Boolean);
+
+      const testNamesList = selectedTemplates.map((t) => t!.name);
+      const testCategory = selectedTemplates[0]?.category || "General Pathology";
+      const calcFee = selectedLabTestCodes.reduce(
+        (acc, code) => acc + (LAB_TEST_PRICES[code] || 800),
+        0
+      );
+      const serviceFee = visitFee > 0 ? visitFee : calcFee;
+      const testNamesDisplay = testNamesList.join(", ") || "Complete Blood Count (CBC)";
 
       const newVisit: VisitRecord = {
         id: `vis-${Date.now()}`,
@@ -373,15 +461,15 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
         patientId: selectedPatientForVisit.id,
         patientName: selectedPatientForVisit.fullName,
         mrNumber: selectedPatientForVisit.mrNumber,
-        destinationType: isLab ? "LAB" : "ULTRASOUND",
-        consultantId: isLab ? "doc-4" : "doc-3",
-        consultantName: isLab ? "Dr. Tariq Mahmood" : "Dr. Kamran Raza",
-        department: isLab ? "Laboratory" : "Ultrasound",
+        destinationType: "LAB",
+        consultantId: "doc-4",
+        consultantName: "Dr. Tariq Mahmood (Pathology)",
+        department: "Laboratory",
         consultationFee: serviceFee,
         amountReceived: serviceFee,
         paymentMethod,
-        status: isLab ? "LAB_REQUESTED" : "ULTRASOUND_REQUESTED",
-        reasonForVisit: isLab ? selectedLabTests.join(", ") : selectedUsExam,
+        status: "LAB_REQUESTED",
+        reasonForVisit: testNamesDisplay,
         visitDate: dateNow,
         arrivalTime: arrivalNow,
       };
@@ -390,11 +478,77 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
         id: `txn-${Date.now()}`,
         transactionNumber: `TXN-2026-${String(Date.now()).slice(-4)}`,
         transactionType: "INCOME",
-        category: isLab ? "Laboratory Test" : "Ultrasound",
-        department: isLab ? "Laboratory" : "Ultrasound",
+        category: "Laboratory Test",
+        department: "Laboratory",
         amount: serviceFee,
         paymentMethod,
-        description: `${isLab ? "Lab Test Fee" : "Ultrasound Scan Fee"} - ${selectedPatientForVisit.fullName}`,
+        description: `Lab Test Fee (${testNamesDisplay}) - ${selectedPatientForVisit.fullName}`,
+        date: dateNow,
+        time: arrivalNow,
+        patientName: selectedPatientForVisit.fullName,
+        mrNumber: selectedPatientForVisit.mrNumber,
+        createdBy: "Ayesha Khan (Receptionist)",
+      };
+
+      onAddVisit(newVisit, newLedgerTxn);
+
+      // Create & Dispatch LabOrderRecord directly to Laboratory Portal
+      const newLabOrder: LabOrderRecord = {
+        id: `lab-${Date.now()}`,
+        orderNumber: `LAB-${Date.now().toString().slice(-6)}`,
+        patientId: selectedPatientForVisit.id,
+        patientName: selectedPatientForVisit.fullName,
+        mrNumber: selectedPatientForVisit.mrNumber,
+        cnic: selectedPatientForVisit.cnic || "",
+        age: selectedPatientForVisit.age,
+        gender: selectedPatientForVisit.gender,
+        visitId: newVisit.id,
+        consultantId: "c-reception",
+        consultantName: "Direct Lab Request (Reception)",
+        testCategory: testCategory,
+        tests: testNamesList.length > 0 ? testNamesList : ["Complete Blood Count (CBC)"],
+        totalFee: serviceFee,
+        priority: "NORMAL",
+        status: "ORDERED",
+        requestDate: dateNow,
+        currentVersion: 1,
+      };
+
+      createLabOrderApi(newLabOrder);
+      setPrintedReceipt(newVisit);
+      alert(`Direct Lab Order (${testNamesDisplay}) registered and dispatched to Laboratory Portal! Fee collected.`);
+    } else {
+      // Direct Ultrasound Scan Request
+      const serviceFee = visitFee > 0 ? visitFee : 3000;
+
+      const newVisit: VisitRecord = {
+        id: `vis-${Date.now()}`,
+        visitNumber: `VIS-2026-${String(visits.length + 901)}`,
+        patientId: selectedPatientForVisit.id,
+        patientName: selectedPatientForVisit.fullName,
+        mrNumber: selectedPatientForVisit.mrNumber,
+        destinationType: "ULTRASOUND",
+        consultantId: "doc-3",
+        consultantName: "Dr. Kamran Raza",
+        department: "Ultrasound",
+        consultationFee: serviceFee,
+        amountReceived: serviceFee,
+        paymentMethod,
+        status: "ULTRASOUND_REQUESTED",
+        reasonForVisit: selectedUsExam,
+        visitDate: dateNow,
+        arrivalTime: arrivalNow,
+      };
+
+      const newLedgerTxn: CashTransactionRecord = {
+        id: `txn-${Date.now()}`,
+        transactionNumber: `TXN-2026-${String(Date.now()).slice(-4)}`,
+        transactionType: "INCOME",
+        category: "Ultrasound",
+        department: "Ultrasound",
+        amount: serviceFee,
+        paymentMethod,
+        description: `Ultrasound Scan Fee - ${selectedPatientForVisit.fullName}`,
         date: dateNow,
         time: arrivalNow,
         patientName: selectedPatientForVisit.fullName,
@@ -404,7 +558,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
       onAddVisit(newVisit, newLedgerTxn);
       setPrintedReceipt(newVisit);
-      alert(`Direct ${isLab ? "Lab Order" : "Ultrasound Scan"} registered! Fee collected.`);
+      alert(`Direct Ultrasound Scan registered! Fee collected.`);
     }
 
     setSelectedPatientForVisit(null);
@@ -793,8 +947,13 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                         if (val === "OPD") setVisitFee(2000);
                         else if (val === "OT") setVisitFee(35000);
                         else if (val === "GYNECOLOGY") setVisitFee(45000);
-                        else if (val === "LAB") setVisitFee(1800);
-                        else if (val === "ULTRASOUND") setVisitFee(3000);
+                        else if (val === "LAB") {
+                          const calcFee = selectedLabTestCodes.reduce(
+                            (sum, c) => sum + (LAB_TEST_PRICES[c] || 800),
+                            0
+                          );
+                          setVisitFee(calcFee > 0 ? calcFee : 1200);
+                        } else if (val === "ULTRASOUND") setVisitFee(3000);
                       }}
                       className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border-2 border-brand-500 text-xs font-extrabold text-brand-600 dark:text-brand-400"
                     >
@@ -909,6 +1068,196 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                           className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border"
                         />
                       </div>
+                    </div>
+                  </div>
+                )}
+
+                {destinationType === "LAB" && (
+                  <div className="p-5 rounded-2xl bg-indigo-950/10 dark:bg-indigo-950/40 border-2 border-indigo-500/40 space-y-4">
+                    {/* Header */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-indigo-200 dark:border-indigo-800/60 pb-3">
+                      <div>
+                        <h4 className="font-black text-indigo-950 dark:text-indigo-200 text-sm flex items-center gap-2">
+                          <FlaskConical className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                          <span>Select Laboratory Tests for Patient Order:</span>
+                        </h4>
+                        <p className="text-xs text-indigo-700 dark:text-indigo-300 mt-0.5 font-medium">
+                          Select exact tests matching Laboratory Portal templates. Fee is automatically computed.
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="px-3 py-1 rounded-full bg-indigo-600/15 text-indigo-800 dark:text-indigo-200 font-extrabold text-xs border border-indigo-500/30">
+                          {selectedLabTestCodes.length} Test{selectedLabTestCodes.length !== 1 ? "s" : ""} Selected
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Quick Popular Test Chips */}
+                    <div>
+                      <label className="block text-[11px] font-extrabold uppercase tracking-wider text-indigo-800 dark:text-indigo-300 mb-1.5">
+                        ⚡ Popular Quick-Select Tests:
+                      </label>
+                      <div className="flex flex-wrap gap-1.5">
+                        {POPULAR_LAB_CODES.map((code) => {
+                          const tmpl = DEFAULT_LAB_TEMPLATES.find((t) => t.code === code);
+                          if (!tmpl) return null;
+                          const isSelected = selectedLabTestCodes.includes(code);
+                          const price = LAB_TEST_PRICES[code] || 800;
+                          return (
+                            <button
+                              key={code}
+                              type="button"
+                              onClick={() => toggleLabTest(code)}
+                              className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer shadow-sm ${
+                                isSelected
+                                  ? "bg-indigo-600 text-white ring-2 ring-indigo-400 shadow-indigo-600/30 scale-105"
+                                  : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 hover:text-indigo-600"
+                              }`}
+                            >
+                              {isSelected ? (
+                                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                              ) : (
+                                <Plus className="w-3.5 h-3.5 text-slate-400" />
+                              )}
+                              <span>{tmpl.code}</span>
+                              <span className="text-[10px] opacity-80 font-mono">(Rs. {price})</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Search & Category Filter */}
+                    <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                      <div className="relative flex-1">
+                        <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                        <input
+                          type="text"
+                          placeholder="Search test by name, code (e.g. CBC, LFT, Urine)..."
+                          value={labTestSearchQuery}
+                          onChange={(e) => setLabTestSearchQuery(e.target.value)}
+                          className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800/80 text-xs font-semibold focus:ring-2 focus:ring-indigo-500 text-slate-900 dark:text-white"
+                        />
+                      </div>
+
+                      <div className="flex items-center gap-1 overflow-x-auto pb-1 sm:pb-0">
+                        {["ALL", "Hematology", "Biochemistry", "Serology", "Clinical Pathology", "Microbiology"].map((cat) => (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => setLabCategoryFilter(cat)}
+                            className={`px-2.5 py-1.5 rounded-lg text-xs font-extrabold whitespace-nowrap transition-colors cursor-pointer ${
+                              labCategoryFilter === cat
+                                ? "bg-indigo-600 text-white"
+                                : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-indigo-50"
+                            }`}
+                          >
+                            {cat}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Selected Tests Summary Box */}
+                    {selectedLabTestCodes.length > 0 && (
+                      <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border-2 border-indigo-300 dark:border-indigo-700 space-y-2 shadow-sm">
+                        <div className="flex items-center justify-between text-xs font-black text-indigo-950 dark:text-indigo-200">
+                          <span className="flex items-center gap-1.5">
+                            <TestTube className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+                            <span>Selected Tests Basket ({selectedLabTestCodes.length}):</span>
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedLabTestCodes([]);
+                              setVisitFee(0);
+                            }}
+                            className="text-[11px] text-rose-500 hover:underline cursor-pointer font-bold"
+                          >
+                            Clear Selection
+                          </button>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {selectedLabTestCodes.map((code) => {
+                            const tmpl = DEFAULT_LAB_TEMPLATES.find((t) => t.code === code);
+                            const price = LAB_TEST_PRICES[code] || 800;
+                            return (
+                              <span
+                                key={code}
+                                className="px-2.5 py-1 rounded-lg bg-indigo-50 dark:bg-indigo-950/80 border border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 text-xs font-bold flex items-center gap-1.5 shadow-xs"
+                              >
+                                <span>{tmpl?.name || code}</span>
+                                <span className="font-mono text-emerald-600 dark:text-emerald-400 font-black text-[11px]">
+                                  Rs. {price}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={() => toggleLabTest(code)}
+                                  className="text-indigo-400 hover:text-rose-500 font-bold ml-1 cursor-pointer text-sm"
+                                >
+                                  ×
+                                </button>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Test Cards Selection Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-64 overflow-y-auto pr-1">
+                      {filteredLabTemplates.map((tmpl) => {
+                        const isSelected = selectedLabTestCodes.includes(tmpl.code);
+                        const price = LAB_TEST_PRICES[tmpl.code] || 800;
+                        return (
+                          <div
+                            key={tmpl.code}
+                            onClick={() => toggleLabTest(tmpl.code)}
+                            className={`p-3 rounded-xl border transition-all cursor-pointer select-none flex items-start justify-between gap-2 ${
+                              isSelected
+                                ? "bg-indigo-50 dark:bg-indigo-950/80 border-indigo-500 shadow-md ring-2 ring-indigo-500/50"
+                                : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-indigo-300 hover:bg-slate-50 dark:hover:bg-slate-800"
+                            }`}
+                          >
+                            <div className="space-y-1">
+                              <div className="flex items-center gap-2">
+                                <span className="font-black text-xs text-slate-900 dark:text-white">
+                                  {tmpl.name}
+                                </span>
+                              </div>
+                              <p className="text-[10px] text-slate-500 dark:text-slate-400 line-clamp-1">
+                                {tmpl.description}
+                              </p>
+                              <div className="flex items-center gap-2 pt-0.5">
+                                <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
+                                  {tmpl.category}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                  {tmpl.sampleType}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-right shrink-0">
+                              <span className="block font-mono font-black text-xs text-emerald-600 dark:text-emerald-400">
+                                Rs. {price}
+                              </span>
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="mt-1.5 w-4 h-4 text-indigo-600 rounded border-slate-300 focus:ring-indigo-500 cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {filteredLabTemplates.length === 0 && (
+                        <div className="col-span-full py-6 text-center text-xs text-slate-500">
+                          No lab test templates found matching "{labTestSearchQuery}".
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

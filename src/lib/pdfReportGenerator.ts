@@ -221,57 +221,55 @@ export class LabPdfReportGenerator {
       .map(
         (r) => `
       <tr class="${r.flag !== "NORMAL" ? "bg-rose-50 font-semibold text-rose-700" : ""}">
-        <td class="py-2 px-3 border border-slate-200">${r.section ? `<span class="text-slate-400 text-xs font-mono">[${r.section}]</span> ` : ""}${r.name}</td>
-        <td class="py-2 px-3 border border-slate-200 font-mono ${r.flag !== "NORMAL" ? "font-bold text-rose-600" : "font-bold text-slate-900"}">
-          ${r.value} ${r.flag !== "NORMAL" ? `<span class="ml-1 text-[10px] px-1.5 py-0.5 rounded bg-rose-100 text-rose-800 font-bold uppercase">${r.flag}</span>` : ""}
+        <td class="py-2.5 px-3 border-b border-slate-200 font-medium text-slate-900">${r.name}</td>
+        <td class="py-2.5 px-3 border-b border-slate-200 font-mono ${r.flag !== "NORMAL" ? "font-bold text-rose-600" : "font-bold text-slate-900"}">
+          ${r.value || "-"} ${r.flag !== "NORMAL" ? `<span class="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-100 text-rose-800 font-bold uppercase">${r.flag}</span>` : ""}
         </td>
-        <td class="py-2 px-3 border border-slate-200 text-slate-500 font-mono">${r.unit || "-"}</td>
-        <td class="py-2 px-3 border border-slate-200 text-slate-600 font-mono">${r.referenceRange || "Normal"}</td>
+        <td class="py-2.5 px-3 border-b border-slate-200 font-mono text-slate-700">${r.unit || "-"}</td>
+        <td class="py-2.5 px-3 border-b border-slate-200 font-mono text-slate-700 whitespace-pre-line">${r.referenceRange || "Normal"}</td>
       </tr>
     `
       )
       .join("");
 
+    const sectionTitle =
+      data.template.sections && data.template.sections.length > 0
+        ? data.template.sections[0]
+        : data.testCategory || "Heamatological Parameters";
+
     return `
-      <div class="max-w-4xl mx-auto bg-white p-8 border border-slate-200 shadow-xl rounded-2xl text-slate-900 font-sans text-xs">
-        <!-- HEADER -->
-        <div class="flex justify-between items-start border-b-2 border-amber-500 pb-4 mb-4">
-          <div>
-            <div class="text-xs font-bold uppercase tracking-wider text-amber-600">Bilal Hospital Management System</div>
-            <h1 class="text-2xl font-black text-slate-900">PATHOLOGY DIAGNOSTIC REPORT</h1>
-            <p class="text-[11px] text-slate-500">Main GT Road, Rawalpindi / Islamabad | Tel: (051) 111-555-999</p>
+      <div class="max-w-4xl mx-auto bg-white p-8 border border-slate-300 shadow-xl rounded-2xl text-slate-900 font-sans text-xs">
+        <!-- TOP DEMOGRAPHICS HEADER (Matches Official Format) -->
+        <div class="flex justify-between items-start border-b border-slate-300 pb-3 mb-4 text-xs leading-relaxed">
+          <div class="space-y-1">
+            <div><strong class="inline-block w-24 text-slate-800">Name:</strong> <span class="font-bold text-slate-900">${data.patientName}</span></div>
+            <div><strong class="inline-block w-24 text-slate-800">Age:</strong> ${data.age} Years</div>
+            <div><strong class="inline-block w-24 text-slate-800">Referred By:</strong> ${data.consultantName}</div>
           </div>
-          <div class="text-right">
-            <span class="inline-block px-3 py-1 bg-amber-500 text-slate-950 font-black rounded-lg text-xs tracking-wider">VERIFIED REPORT</span>
-            <div class="text-[10px] font-mono text-slate-400 mt-1">ID: ${data.reportId} | Ver: v${data.versionNumber}</div>
+          <div class="space-y-1 text-right">
+            <div><strong class="inline-block w-20 text-slate-800">Gender:</strong> ${data.gender}</div>
+            <div><strong class="inline-block w-20 text-slate-800">Lab No:</strong> <span class="font-mono font-bold">${data.orderNumber}</span></div>
+            <div><strong class="inline-block w-20 text-slate-800">Date:</strong> <span class="font-mono">${data.reportDate}</span></div>
           </div>
         </div>
 
-        <!-- DEMOGRAPHICS BANNER -->
-        <div class="grid grid-cols-2 gap-x-6 gap-y-2 bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6 font-mono text-[11px]">
-          <div><span class="font-bold text-slate-500">PATIENT NAME:</span> <strong class="text-slate-900 font-sans text-sm">${data.patientName}</strong></div>
-          <div><span class="font-bold text-slate-500">MRN (PATIENT ID):</span> <strong class="text-amber-600 font-bold">${data.mrNumber}</strong></div>
-          <div><span class="font-bold text-slate-500">AGE / GENDER:</span> ${data.age} Yrs / ${data.gender}</div>
-          <div><span class="font-bold text-slate-500">CNIC NUMBER:</span> <strong class="text-slate-900 font-bold">${data.cnic || "N/A"}</strong></div>
-          <div><span class="font-bold text-slate-500">CONSULTANT:</span> ${data.consultantName}</div>
-          <div><span class="font-bold text-slate-500">LAB ORDER NO:</span> ${data.orderNumber}</div>
-          <div><span class="font-bold text-slate-500">SAMPLE DATE:</span> ${data.sampleDate}</div>
-          <div><span class="font-bold text-slate-500">REPORT DATE:</span> ${data.reportDate}</div>
+        <!-- SECTION & TEST TITLE -->
+        <div class="mt-4 mb-3">
+          <div class="text-sm font-black text-slate-900 uppercase tracking-wide">${sectionTitle}</div>
+          <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1 border-b border-slate-200 pb-0.5">Test Name</div>
+          <div class="text-sm font-black text-slate-900 border-b-2 border-slate-900 py-1 underline font-sans">
+            ${data.template.name || data.testName}
+          </div>
         </div>
 
-        <!-- TEST TITLE -->
-        <div class="text-center font-black text-base text-slate-900 uppercase tracking-wide my-4 border-y border-amber-200 py-2 bg-amber-50/50">
-          ${data.testName}
-        </div>
-
-        <!-- TABLE -->
-        <table class="w-full text-left border-collapse my-4 border border-slate-200 text-xs">
+        <!-- PARAMETERS TABLE -->
+        <table class="w-full text-left border-collapse my-3 text-xs">
           <thead>
-            <tr class="bg-slate-900 text-white font-bold uppercase text-[10px]">
-              <th class="py-2.5 px-3 border border-slate-800">Test Parameter</th>
-              <th class="py-2.5 px-3 border border-slate-800">Observed Result</th>
-              <th class="py-2.5 px-3 border border-slate-800">Unit</th>
-              <th class="py-2.5 px-3 border border-slate-800">Biological Reference Interval</th>
+            <tr class="border-b-2 border-slate-900 font-bold uppercase text-[11px] text-slate-900 bg-slate-50/80">
+              <th class="py-2.5 px-3 border-b border-slate-300">Test Name</th>
+              <th class="py-2.5 px-3 border-b border-slate-300">Result</th>
+              <th class="py-2.5 px-3 border-b border-slate-300">Unit</th>
+              <th class="py-2.5 px-3 border-b border-slate-300">Reference Ranges</th>
             </tr>
           </thead>
           <tbody>
@@ -279,31 +277,22 @@ export class LabPdfReportGenerator {
           </tbody>
         </table>
 
-        <!-- REMARKS -->
+        <!-- REMARKS & INTERPRETATION -->
         ${
           data.remarks || data.template.interpretationNotes
             ? `
-          <div class="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200">
-            <div class="font-bold text-slate-700 mb-1">Technician Remarks & Interpretation:</div>
-            <p class="text-slate-600 leading-relaxed">${data.remarks || data.template.interpretationNotes}</p>
+          <div class="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+            <div class="font-bold text-slate-800 mb-1">Remarks / Clinical Interpretation:</div>
+            <p class="text-slate-700 leading-relaxed">${data.remarks || data.template.interpretationNotes}</p>
           </div>
         `
             : ""
         }
 
-        <!-- FOOTER -->
-        <div class="mt-8 pt-4 border-t border-slate-200 flex justify-between items-end text-slate-500 text-[10px]">
-          <div>
-            <div class="font-bold text-slate-800">Prepared By:</div>
-            <div>${data.technicianName} (Lab Technologist)</div>
-          </div>
-          <div class="text-center italic text-slate-400">
-            Computer generated verified report. Signature not required.
-          </div>
-          <div class="text-right">
-            <div class="font-bold text-slate-800">Verified By:</div>
-            <div>${data.pathologistName || "Dr. Khalid Hassan (FCPS Pathologist)"}</div>
-          </div>
+        <!-- FOOTER NOTIFICATION -->
+        <div class="mt-8 pt-4 border-t border-slate-300 text-[11px] text-slate-600 space-y-1">
+          <div class="font-semibold text-slate-800">Note: This is a computer generated report duly verified by Pathologist. It does not need signature.</div>
+          <div class="italic text-slate-500 text-[10px]">(This is a verified computer generated report, does not require signature.)</div>
         </div>
       </div>
     `;

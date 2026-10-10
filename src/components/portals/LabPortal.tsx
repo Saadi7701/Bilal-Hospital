@@ -1513,7 +1513,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <td className="py-3 px-4 font-mono text-slate-500">{param.unit || "-"}</td>
 
                         {/* Reference Range */}
-                        <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400">
+                        <td className="py-3 px-4 font-mono text-slate-600 dark:text-slate-400 whitespace-pre-line">
                           {param.referenceRange || "Normal"}
                         </td>
 

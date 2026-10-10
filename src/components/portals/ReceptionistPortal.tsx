@@ -934,7 +934,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
               <form onSubmit={handleAllInOneIntakeSubmit} className="space-y-4 text-xs">
                 {/* DYNAMIC DESTINATION SELECTOR DROPDOWN */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 bg-brand-50/40 dark:bg-slate-800/40 p-4 rounded-xl border border-brand-200 dark:border-slate-700">
+                <div className="bg-brand-50/40 dark:bg-slate-800/40 p-4 rounded-xl border border-brand-200 dark:border-slate-700">
                   <div>
                     <label className="block font-extrabold text-slate-900 dark:text-white mb-1">
                       Select Patient Destination / Service Required *
@@ -963,20 +963,6 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                       <option value="LAB">4. Direct Laboratory Test Request</option>
                       <option value="ULTRASOUND">5. Direct Ultrasound Scan Request</option>
                     </select>
-                  </div>
-
-                  <div>
-                    <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
-                      Reason for Visit / Symptoms *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. Chest pain, routine checkup, elective surgery..."
-                      value={otProcedureName}
-                      onChange={(e) => setOtProcedureName(e.target.value)}
-                      className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-medium"
-                    />
                   </div>
                 </div>
 
@@ -1325,7 +1311,6 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                   <th className="py-3 px-4">Patient Name & MR No</th>
                   <th className="py-3 px-4">Destination Type</th>
                   <th className="py-3 px-4">Assigned Consultant / Doctor</th>
-                  <th className="py-3 px-4">Reason for Visit</th>
                   <th className="py-3 px-4">Fee Paid</th>
                   <th className="py-3 px-4">Live Status</th>
                   <th className="py-3 px-4 text-right">Receipt</th>
@@ -1361,9 +1346,6 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                     </td>
                     <td className="py-3 px-4 font-semibold text-brand-600 dark:text-brand-400">
                       {visit.consultantName}
-                    </td>
-                    <td className="py-3 px-4 text-slate-600 dark:text-slate-300">
-                      {visit.reasonForVisit}
                     </td>
                     <td className="py-3 px-4 font-mono font-bold text-emerald-600">
                       Rs. {visit.amountReceived}

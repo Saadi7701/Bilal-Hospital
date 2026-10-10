@@ -1073,7 +1073,6 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                   <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
                     <th className="py-4 px-6">Visit No</th>
                     <th className="py-4 px-6">Patient</th>
-                    <th className="py-4 px-6">Reason for Visit</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Action</th>
                   </tr>
@@ -1081,7 +1080,7 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {waitingVisits.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400 font-bold">
+                      <td colSpan={4} className="py-12 text-center text-slate-400 font-bold">
                         No waiting patients in queue.
                       </td>
                     </tr>
@@ -1093,7 +1092,6 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                           <div className="font-bold text-slate-900 dark:text-white">{visit.patientName}</div>
                           <div className="text-xs text-slate-500 font-mono mt-0.5">MR: {visit.mrNumber}</div>
                         </td>
-                        <td className="py-4 px-6 text-slate-600 text-sm max-w-xs truncate">{visit.reasonForVisit}</td>
                         <td className="py-4 px-6">
                           <Badge
                             variant={
@@ -1145,7 +1143,6 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                   <tr className="bg-slate-50 dark:bg-slate-800/50 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b">
                     <th className="py-4 px-6">Visit No</th>
                     <th className="py-4 px-6">Patient</th>
-                    <th className="py-4 px-6">Reason / Notes</th>
                     <th className="py-4 px-6">Status</th>
                     <th className="py-4 px-6 text-right">Action</th>
                   </tr>
@@ -1153,7 +1150,7 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
                   {checkedVisits.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="py-12 text-center text-slate-400 font-bold">
+                      <td colSpan={4} className="py-12 text-center text-slate-400 font-bold">
                         No checked patients yet today.
                       </td>
                     </tr>
@@ -1165,7 +1162,6 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                           <div className="font-bold text-slate-900 dark:text-white">{visit.patientName}</div>
                           <div className="text-xs text-slate-500 font-mono mt-0.5">MR: {visit.mrNumber}</div>
                         </td>
-                        <td className="py-4 px-6 text-slate-600 text-sm max-w-xs truncate">{visit.reasonForVisit}</td>
                         <td className="py-4 px-6">
                           <Badge variant="success">CHECKED</Badge>
                         </td>

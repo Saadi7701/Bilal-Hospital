@@ -604,5 +604,50 @@ export function getTemplateByCode(code: string): LabTemplateDef | undefined {
   if (normalized === "CP" || normalized === "BLOOD CP" || normalized === "BLOOD_CP") {
     return DEFAULT_LAB_TEMPLATES.find((t) => t.code === "BLOOD_CP") || DEFAULT_LAB_TEMPLATES.find((t) => t.code === "CBC");
   }
-  return DEFAULT_LAB_TEMPLATES.find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
+  // Check default templates first
+  const defaultMatch = DEFAULT_LAB_TEMPLATES.find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
+  if (defaultMatch) return defaultMatch;
+  // Then check custom templates
+  return getCustomTemplates().find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
 }
+
+// ─── Custom Template Storage (localStorage) ─────────────────────────────────
+
+const CUSTOM_TEMPLATES_KEY = "bilal_hospital_custom_lab_templates";
+
+export function getCustomTemplates(): LabTemplateDef[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(CUSTOM_TEMPLATES_KEY);
+    return raw ? (JSON.parse(raw) as LabTemplateDef[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function saveCustomTemplate(template: LabTemplateDef): void {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getCustomTemplates();
+    const idx = existing.findIndex((t) => t.code === template.code);
+    if (idx >= 0) {
+      existing[idx] = template; // update
+    } else {
+      existing.push(template); // add new
+    }
+    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+export function deleteCustomTemplate(code: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const existing = getCustomTemplates().filter((t) => t.code !== code);
+    localStorage.setItem(CUSTOM_TEMPLATES_KEY, JSON.stringify(existing));
+  } catch {}
+}
+
+export function getAllTemplates(): LabTemplateDef[] {
+  return [...DEFAULT_LAB_TEMPLATES, ...getCustomTemplates()];
+}
+

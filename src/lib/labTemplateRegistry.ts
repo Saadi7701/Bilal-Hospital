@@ -598,17 +598,57 @@ export const DEFAULT_LAB_TEMPLATES: LabTemplateDef[] = [
   },
 ];
 
-export function getTemplateByCode(code: string): LabTemplateDef | undefined {
-  if (!code) return undefined;
+export function isBuiltInTemplate(code: string): boolean {
+  if (!code) return false;
   const normalized = code.trim().toUpperCase();
-  if (normalized === "CP" || normalized === "BLOOD CP" || normalized === "BLOOD_CP") {
-    return DEFAULT_LAB_TEMPLATES.find((t) => t.code === "BLOOD_CP") || DEFAULT_LAB_TEMPLATES.find((t) => t.code === "CBC");
+  return DEFAULT_LAB_TEMPLATES.some((t) => t.code.toUpperCase() === normalized);
+}
+
+// ─── Built-in Template Overrides Storage (localStorage) ──────────────────────
+
+const TEMPLATE_OVERRIDES_KEY = "bilal_hospital_lab_template_overrides";
+
+export function getTemplateOverrides(): Record<string, LabTemplateDef> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(TEMPLATE_OVERRIDES_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
   }
-  // Check default templates first
-  const defaultMatch = DEFAULT_LAB_TEMPLATES.find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
-  if (defaultMatch) return defaultMatch;
-  // Then check custom templates
-  return getCustomTemplates().find((t) => t.code === normalized || t.name.toUpperCase().includes(normalized));
+}
+
+export function saveTemplateOverride(template: LabTemplateDef): void {
+  if (typeof window === "undefined") return;
+  try {
+    const overrides = getTemplateOverrides();
+    overrides[template.code] = template;
+    localStorage.setItem(TEMPLATE_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {}
+}
+
+export function deleteTemplateOverride(code: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const overrides = getTemplateOverrides();
+    delete overrides[code];
+    localStorage.setItem(TEMPLATE_OVERRIDES_KEY, JSON.stringify(overrides));
+  } catch {}
+}
+
+export function isTemplateOverridden(code: string): boolean {
+  if (typeof window === "undefined") return false;
+  const overrides = getTemplateOverrides();
+  return Boolean(overrides[code]);
+}
+
+export function resetTemplateToDefault(code: string): void {
+  deleteTemplateOverride(code);
+}
+
+export function getEffectiveDefaultTemplates(): LabTemplateDef[] {
+  const overrides = getTemplateOverrides();
+  return DEFAULT_LAB_TEMPLATES.map((t) => overrides[t.code] || t);
 }
 
 // ─── Custom Template Storage (localStorage) ─────────────────────────────────
@@ -647,7 +687,50 @@ export function deleteCustomTemplate(code: string): void {
   } catch {}
 }
 
+/**
+ * Universal save: if it's a built-in template, saves as an override.
+ * Otherwise saves as a custom template.
+ */
+export function saveTemplate(template: LabTemplateDef): void {
+  if (isBuiltInTemplate(template.code)) {
+    saveTemplateOverride(template);
+  } else {
+    saveCustomTemplate(template);
+  }
+}
+
 export function getAllTemplates(): LabTemplateDef[] {
-  return [...DEFAULT_LAB_TEMPLATES, ...getCustomTemplates()];
+  return [...getEffectiveDefaultTemplates(), ...getCustomTemplates()];
+}
+
+export function getTemplateByCode(code: string): LabTemplateDef | undefined {
+  if (!code) return undefined;
+  const normalized = code.trim().toUpperCase();
+
+  // 1. Check custom templates
+  const customTemplates = getCustomTemplates();
+  const customMatch = customTemplates.find(
+    (t) => t.code === normalized || t.name.toUpperCase().includes(normalized)
+  );
+  if (customMatch) return customMatch;
+
+  // 2. Check direct overrides
+  const overrides = getTemplateOverrides();
+  if (overrides[normalized]) return overrides[normalized];
+
+  if (normalized === "CP" || normalized === "BLOOD CP" || normalized === "BLOOD_CP") {
+    if (overrides["BLOOD_CP"]) return overrides["BLOOD_CP"];
+    if (overrides["CBC"]) return overrides["CBC"];
+    return DEFAULT_LAB_TEMPLATES.find((t) => t.code === "BLOOD_CP") || DEFAULT_LAB_TEMPLATES.find((t) => t.code === "CBC");
+  }
+
+  // 3. Check effective defaults
+  const effectiveDefaults = getEffectiveDefaultTemplates();
+  const defaultMatch = effectiveDefaults.find(
+    (t) => t.code === normalized || t.name.toUpperCase().includes(normalized)
+  );
+  if (defaultMatch) return defaultMatch;
+
+  return undefined;
 }
 

@@ -1,4 +1,4 @@
-import { DEFAULT_LAB_TEMPLATES, LabTemplateDef, LabTemplateParamDef } from "./labTemplateRegistry";
+import { DEFAULT_LAB_TEMPLATES, LabTemplateDef, LabTemplateParamDef, getTemplateByCode } from "./labTemplateRegistry";
 
 export type ResultFlag = "NORMAL" | "HIGH" | "LOW" | "CRITICAL" | "ABNORMAL";
 
@@ -45,6 +45,8 @@ export class LabTemplateEngine {
       }
     }
 
+    const match = getTemplateByCode(cleanCode);
+    if (match) return match;
     const defaultMatch = DEFAULT_LAB_TEMPLATES.find((t) => t.code === cleanCode || cleanCode.includes(t.code));
     return defaultMatch || null;
   }

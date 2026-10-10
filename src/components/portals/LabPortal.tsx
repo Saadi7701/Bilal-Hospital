@@ -36,6 +36,9 @@ import {
   Calendar,
   Archive,
   Trash2,
+  Pencil,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
@@ -49,6 +52,15 @@ import {
   getCustomTemplates,
   saveCustomTemplate,
   deleteCustomTemplate,
+  getTemplateOverrides,
+  saveTemplateOverride,
+  deleteTemplateOverride,
+  isTemplateOverridden,
+  resetTemplateToDefault,
+  isBuiltInTemplate,
+  getEffectiveDefaultTemplates,
+  getAllTemplates,
+  saveTemplate,
 } from "../../lib/labTemplateRegistry";
 import { labTemplateEngine } from "../../lib/labTemplateEngine";
 import { labPdfReportGenerator } from "../../lib/pdfReportGenerator";
@@ -117,24 +129,32 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
   const [expandedTestCode, setExpandedTestCode] = useState<string | null>(null);
 
-  // Custom Templates State (localStorage-backed)
+  // Custom Templates & Template Overrides State (localStorage-backed)
   const [customTemplates, setCustomTemplates] = useState<LabTemplateDef[]>(() => getCustomTemplates());
+  const [templateOverrides, setTemplateOverrides] = useState<Record<string, LabTemplateDef>>(() => getTemplateOverrides());
 
-  // ── Add New Template Modal State ──────────────────────────────────────────
-  const [isAddTemplateModalOpen, setIsAddTemplateModalOpen] = useState(false);
-  const [newTmplCode, setNewTmplCode] = useState("");
-  const [newTmplName, setNewTmplName] = useState("");
-  const [newTmplCategory, setNewTmplCategory] = useState("Biochemistry");
-  const [newTmplSampleType, setNewTmplSampleType] = useState("");
-  const [newTmplDescription, setNewTmplDescription] = useState("");
-  const [newTmplSection, setNewTmplSection] = useState("Chemical Parameters");
-  const [newTmplParams, setNewTmplParams] = useState<Array<{
-    name: string; unit: string; referenceRange: string;
-    inputType: "NUMBER" | "TEXT" | "SELECT"; options: string;
+  // ── Template Editor Modal State (Used for Add New & Edit Any Template) ───────
+  const [isTemplateModalOpen, setIsTemplateModalOpen] = useState(false);
+  const [editingTemplateCode, setEditingTemplateCode] = useState<string | null>(null);
+  const [isEditingBuiltIn, setIsEditingBuiltIn] = useState(false);
+  const [tmplCode, setTmplCode] = useState("");
+  const [tmplName, setTmplName] = useState("");
+  const [tmplCategory, setTmplCategory] = useState("Biochemistry");
+  const [tmplSampleType, setTmplSampleType] = useState("");
+  const [tmplDescription, setTmplDescription] = useState("");
+  const [tmplDefaultSection, setTmplDefaultSection] = useState("Chemical Parameters");
+  const [tmplParams, setTmplParams] = useState<Array<{
+    parameterId: string;
+    name: string;
+    section: string;
+    unit: string;
+    referenceRange: string;
+    inputType: "NUMBER" | "TEXT" | "SELECT" | "HEADING";
+    options: string;
   }>>([
-    { name: "", unit: "", referenceRange: "", inputType: "NUMBER", options: "" }
+    { parameterId: "param_1", name: "", section: "Chemical Parameters", unit: "", referenceRange: "", inputType: "NUMBER", options: "" }
   ]);
-  const [addTmplError, setAddTmplError] = useState("");
+  const [tmplError, setTmplError] = useState("");
 
   // New Requisition Modal Search & Filter State
   const [newReqTemplateSearch, setNewReqTemplateSearch] = useState("");
@@ -538,8 +558,11 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const isVersionHistoryTab = activeTab === "version_history";
   const isRevisionTab = activeTab === "revision_notices";
 
-  // Catalog filtered list — default + custom merged
-  const allCatalogTemplates = [...DEFAULT_LAB_TEMPLATES, ...customTemplates];
+  // Catalog filtered list — built-in (with any overrides applied) + custom templates
+  const effectiveDefaultTemplates = DEFAULT_LAB_TEMPLATES.map(
+    (t) => templateOverrides[t.code] || t
+  );
+  const allCatalogTemplates = [...effectiveDefaultTemplates, ...customTemplates];
   const filteredTemplates = allCatalogTemplates.filter((t) => {
     const matchesCategory =
       selectedCategoryFilter === "ALL" ||
@@ -557,49 +580,154 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     return matchesCategory && matchesQuery;
   });
 
-  // Save a new custom template and refresh catalog
-  const handleSaveNewTemplate = () => {
-    setAddTmplError("");
-    const code = newTmplCode.trim().toUpperCase().replace(/\s+/g, "_");
-    if (!code) { setAddTmplError("Test Code is required."); return; }
-    if (!newTmplName.trim()) { setAddTmplError("Test Name is required."); return; }
-    if (DEFAULT_LAB_TEMPLATES.some(t => t.code === code)) {
-      setAddTmplError(`Code "${code}" already exists as a built-in template.`); return;
-    }
-    const validParams = newTmplParams.filter(p => p.name.trim());
-    if (validParams.length === 0) { setAddTmplError("Add at least one parameter."); return; }
-
-    const template: LabTemplateDef = {
-      code,
-      name: newTmplName.trim(),
-      category: newTmplCategory,
-      sampleType: newTmplSampleType.trim() || "Serum",
-      description: newTmplDescription.trim() || newTmplName.trim(),
-      sections: [newTmplSection.trim() || "Chemical Parameters"],
-      parameters: validParams.map((p, i) => ({
-        parameterId: p.name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, ""),
-        name: p.name.trim(),
-        section: newTmplSection.trim() || "Chemical Parameters",
-        unit: p.unit.trim() || undefined,
-        referenceRange: p.referenceRange.trim() || undefined,
-        inputType: p.inputType,
-        options: p.inputType === "SELECT" && p.options.trim()
-          ? p.options.split(",").map(o => o.trim()).filter(Boolean)
-          : undefined,
-        displayOrder: i + 1,
-      })),
-    };
-
-    saveCustomTemplate(template);
-    const updated = getCustomTemplates();
-    setCustomTemplates(updated);
-    // Reset form
-    setNewTmplCode(""); setNewTmplName(""); setNewTmplDescription("");
-    setNewTmplSampleType(""); setNewTmplSection("Chemical Parameters");
-    setNewTmplParams([{ name: "", unit: "", referenceRange: "", inputType: "NUMBER", options: "" }]);
-    setIsAddTemplateModalOpen(false);
+  // Open modal to add a completely new template
+  const handleOpenAddTemplate = () => {
+    setEditingTemplateCode(null);
+    setIsEditingBuiltIn(false);
+    setTmplCode("");
+    setTmplName("");
+    setTmplCategory("Biochemistry");
+    setTmplSampleType("Serum");
+    setTmplDescription("");
+    setTmplDefaultSection("Chemical Parameters");
+    setTmplParams([
+      {
+        parameterId: `param_${Date.now()}_1`,
+        name: "",
+        section: "Chemical Parameters",
+        unit: "",
+        referenceRange: "",
+        inputType: "NUMBER",
+        options: "",
+      },
+    ]);
+    setTmplError("");
+    setIsTemplateModalOpen(true);
   };
 
+  // Open modal to edit ANY existing template (built-in or custom)
+  const handleOpenEditTemplate = (tmpl: LabTemplateDef) => {
+    const isBuiltIn = isBuiltInTemplate(tmpl.code);
+    setEditingTemplateCode(tmpl.code);
+    setIsEditingBuiltIn(isBuiltIn);
+    setTmplCode(tmpl.code);
+    setTmplName(tmpl.name);
+    setTmplCategory(tmpl.category || "Biochemistry");
+    setTmplSampleType(tmpl.sampleType || "Serum");
+    setTmplDescription(tmpl.description || "");
+    const defaultSec = tmpl.sections?.[0] || "Chemical Parameters";
+    setTmplDefaultSection(defaultSec);
+    setTmplParams(
+      tmpl.parameters.map((p, idx) => ({
+        parameterId: p.parameterId || `param_${idx + 1}`,
+        name: p.name || "",
+        section: p.section || defaultSec,
+        unit: p.unit || "",
+        referenceRange: p.referenceRange || "",
+        inputType: p.inputType || "NUMBER",
+        options: p.options ? p.options.join(", ") : "",
+      }))
+    );
+    setTmplError("");
+    setIsTemplateModalOpen(true);
+  };
+
+  // Save template (creates new or updates existing built-in/custom)
+  const handleSaveTemplate = () => {
+    setTmplError("");
+    const cleanCode = tmplCode.trim().toUpperCase().replace(/\s+/g, "_");
+    if (!cleanCode) {
+      setTmplError("Test Code is required.");
+      return;
+    }
+    if (!tmplName.trim()) {
+      setTmplError("Test Name is required.");
+      return;
+    }
+
+    // If adding a new template, ensure code is not already taken
+    if (!editingTemplateCode) {
+      if (
+        DEFAULT_LAB_TEMPLATES.some((t) => t.code === cleanCode) ||
+        customTemplates.some((t) => t.code === cleanCode)
+      ) {
+        setTmplError(`Code "${cleanCode}" already exists. Please choose a unique test code.`);
+        return;
+      }
+    }
+
+    const validParams = tmplParams.filter((p) => p.name.trim());
+    if (validParams.length === 0) {
+      setTmplError("Please add at least one test parameter.");
+      return;
+    }
+
+    // Collect all distinct sections
+    const distinctSections = Array.from(
+      new Set(
+        validParams
+          .map((p) => p.section.trim() || tmplDefaultSection.trim() || "Chemical Parameters")
+          .filter(Boolean)
+      )
+    );
+
+    const updatedTemplate: LabTemplateDef = {
+      code: cleanCode,
+      name: tmplName.trim(),
+      category: tmplCategory,
+      sampleType: tmplSampleType.trim() || "Serum",
+      description: tmplDescription.trim() || tmplName.trim(),
+      sections:
+        distinctSections.length > 0
+          ? distinctSections
+          : [tmplDefaultSection.trim() || "Chemical Parameters"],
+      parameters: validParams.map((p, i) => {
+        const fallbackId =
+          p.name.trim().toLowerCase().replace(/\s+/g, "_").replace(/[^a-z0-9_]/g, "") || `p_${i + 1}`;
+        const finalParamId =
+          p.parameterId && !p.parameterId.startsWith("param_") ? p.parameterId : fallbackId;
+
+        return {
+          parameterId: finalParamId,
+          name: p.name.trim(),
+          section: p.section.trim() || tmplDefaultSection.trim() || "Chemical Parameters",
+          unit: p.unit.trim() || undefined,
+          referenceRange: p.referenceRange.trim() || undefined,
+          inputType: p.inputType,
+          options:
+            p.inputType === "SELECT" && p.options.trim()
+              ? p.options.split(",").map((o) => o.trim()).filter(Boolean)
+              : undefined,
+          displayOrder: i + 1,
+        };
+      }),
+    };
+
+    if (isEditingBuiltIn) {
+      saveTemplateOverride(updatedTemplate);
+      setTemplateOverrides(getTemplateOverrides());
+    } else {
+      saveCustomTemplate(updatedTemplate);
+      setCustomTemplates(getCustomTemplates());
+    }
+
+    setIsTemplateModalOpen(false);
+    setEditingTemplateCode(null);
+  };
+
+  // Reset a modified built-in template to factory default
+  const handleResetTemplate = (code: string) => {
+    if (
+      window.confirm(
+        `Reset template "${code}" to factory default settings? Any customizations will be discarded.`
+      )
+    ) {
+      resetTemplateToDefault(code);
+      setTemplateOverrides(getTemplateOverrides());
+    }
+  };
+
+  // Delete a custom template
   const handleDeleteCustomTemplate = (code: string) => {
     if (!window.confirm(`Delete custom template "${code}"? This cannot be undone.`)) return;
     deleteCustomTemplate(code);
@@ -958,13 +1086,13 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                   <span>Diagnostic Test Catalog & Lab Templates ({allCatalogTemplates.length})</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-1">
-                  {DEFAULT_LAB_TEMPLATES.length} built-in + <span className="font-bold text-emerald-600">{customTemplates.length} custom</span> templates. Built-in match real XLS files. Custom templates are saved locally.
+                  {DEFAULT_LAB_TEMPLATES.length} built-in{Object.keys(templateOverrides).length > 0 ? ` (${Object.keys(templateOverrides).length} customized)` : ""} + <span className="font-bold text-emerald-600">{customTemplates.length} custom</span> templates. Lab staff can edit parameter names, types, units, and ranges for any template.
                 </p>
               </div>
 
               <div className="flex items-center gap-2 flex-wrap">
                 <button
-                  onClick={() => setIsAddTemplateModalOpen(true)}
+                  onClick={handleOpenAddTemplate}
                   className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs inline-flex items-center gap-2 shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer whitespace-nowrap"
                 >
                   <Plus className="w-4 h-4 stroke-[3]" />
@@ -1004,6 +1132,8 @@ export const LabPortal: React.FC<LabPortalProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
               {filteredTemplates.map((tmpl) => {
                 const isExpanded = expandedTestCode === tmpl.code;
+                const isCustom = customTemplates.some((ct) => ct.code === tmpl.code);
+                const isModifiedBuiltIn = Boolean(templateOverrides[tmpl.code]);
 
                 return (
                   <div
@@ -1016,9 +1146,24 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <span className="px-2.5 py-1 rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 font-mono font-black text-xs">
                           {tmpl.code}
                         </span>
-                        <span className="px-2.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold uppercase">
-                          {tmpl.category}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {isCustom ? (
+                            <span className="px-2 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-400 text-[10px] font-bold">
+                              Custom
+                            </span>
+                          ) : isModifiedBuiltIn ? (
+                            <span className="px-2 py-0.5 rounded-md bg-indigo-100 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-400 text-[10px] font-bold">
+                              Customized
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
+                              Built-in
+                            </span>
+                          )}
+                          <span className="px-2.5 py-0.5 rounded-md bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300 text-[10px] font-bold uppercase">
+                            {tmpl.category}
+                          </span>
+                        </div>
                       </div>
 
                       {/* Title & Full Form */}
@@ -1076,6 +1221,15 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
                     {/* Action Buttons */}
                     <div className="pt-2 flex flex-col gap-2">
+                      {/* EDIT TEMPLATE BUTTON FOR ALL TEMPLATES */}
+                      <button
+                        onClick={() => handleOpenEditTemplate(tmpl)}
+                        className="w-full py-2 px-3 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                        <span>Edit Template & Parameters</span>
+                      </button>
+
                       <button
                         onClick={() => handleLaunchResultForTemplate(tmpl)}
                         className="w-full py-2 px-3 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center justify-center gap-1.5 shadow-sm transition-all cursor-pointer"
@@ -1083,8 +1237,20 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <FlaskConical className="w-3.5 h-3.5" />
                         <span>Enter Result for {tmpl.code}</span>
                       </button>
+
+                      {/* Reset button if built-in template has been modified */}
+                      {isModifiedBuiltIn && (
+                        <button
+                          onClick={() => handleResetTemplate(tmpl.code)}
+                          className="w-full py-1.5 px-3 rounded-xl bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                        >
+                          <RotateCcw className="w-3 h-3 text-slate-500" />
+                          <span>Reset to Factory Default</span>
+                        </button>
+                      )}
+
                       {/* Show delete button only for custom templates */}
-                      {customTemplates.some(ct => ct.code === tmpl.code) && (
+                      {isCustom && (
                         <button
                           onClick={() => handleDeleteCustomTemplate(tmpl.code)}
                           className="w-full py-1.5 px-3 rounded-xl bg-rose-100 dark:bg-rose-950/40 hover:bg-rose-200 text-rose-700 dark:text-rose-400 font-bold text-xs inline-flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-rose-200 dark:border-rose-900"
@@ -1793,178 +1959,344 @@ export const LabPortal: React.FC<LabPortalProps> = ({
           </div>
         </Modal>
       )}
-      {/* ═══════════ ADD NEW TEMPLATE MODAL ═══════════ */}
-      {isAddTemplateModalOpen && (
+      {/* ═══════════ TEMPLATE BUILDER & EDITOR MODAL ═══════════ */}
+      {isTemplateModalOpen && (
         <Modal
           isOpen
-          onClose={() => { setIsAddTemplateModalOpen(false); setAddTmplError(""); }}
-          title="Add New Lab Test Template"
-          subtitle="Create a custom test template that lab staff can immediately use for result entry"
-          maxWidth="2xl"
+          onClose={() => {
+            setIsTemplateModalOpen(false);
+            setTmplError("");
+            setEditingTemplateCode(null);
+          }}
+          title={
+            editingTemplateCode
+              ? `Edit Test Template: ${tmplName || editingTemplateCode}`
+              : "Add New Lab Test Template"
+          }
+          subtitle={
+            editingTemplateCode
+              ? isEditingBuiltIn
+                ? "Customize parameter names, types, units, and reference ranges for this test. Factory presets can be restored anytime."
+                : "Modify details, parameters, units, and ranges for this custom template."
+              : "Create a custom test template that lab staff can immediately use for result entry"
+          }
+          maxWidth="4xl"
         >
           <div className="space-y-5 text-xs">
-
-            {addTmplError && (
+            {tmplError && (
               <div className="p-3 rounded-xl bg-rose-100 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800 text-rose-700 dark:text-rose-400 font-bold flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {addTmplError}
+                <AlertTriangle className="w-4 h-4 flex-shrink-0" /> {tmplError}
               </div>
             )}
 
             {/* Row 1: Code + Name */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Test Code *</label>
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                    Test Code *
+                  </label>
+                  {editingTemplateCode && (
+                    <span className="text-[10px] text-amber-600 dark:text-amber-400 font-medium">
+                      (Code locked during edit)
+                    </span>
+                  )}
+                </div>
                 <input
                   type="text"
-                  value={newTmplCode}
-                  onChange={e => setNewTmplCode(e.target.value.toUpperCase())}
+                  value={tmplCode}
+                  disabled={Boolean(editingTemplateCode)}
+                  onChange={(e) => setTmplCode(e.target.value.toUpperCase())}
                   placeholder="e.g. URIC_ACID"
-                  className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-bold"
+                  className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-mono font-bold disabled:opacity-60 disabled:cursor-not-allowed"
                 />
-                <p className="text-[10px] text-slate-400">Unique short code. Auto-uppercased.</p>
+                <p className="text-[10px] text-slate-400">
+                  Unique identifier used by reports and order requisition.
+                </p>
               </div>
+
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Test Name *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                  Test Name *
+                </label>
                 <input
                   type="text"
-                  value={newTmplName}
-                  onChange={e => setNewTmplName(e.target.value)}
+                  value={tmplName}
+                  onChange={(e) => setTmplName(e.target.value)}
                   placeholder="e.g. Serum Uric Acid"
-                  className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 font-semibold"
                 />
+                <p className="text-[10px] text-slate-400">
+                  Full official name printed on patient lab reports.
+                </p>
               </div>
             </div>
 
             {/* Row 2: Category + Sample Type */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Category *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                  Category / Department *
+                </label>
                 <select
-                  value={newTmplCategory}
-                  onChange={e => setNewTmplCategory(e.target.value)}
+                  value={tmplCategory}
+                  onChange={(e) => setTmplCategory(e.target.value)}
                   className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 >
-                  {["Biochemistry","Hematology","Serology","Clinical Pathology","Microbiology"].map(c => (
-                    <option key={c} value={c}>{c}</option>
+                  {[
+                    "Biochemistry",
+                    "Hematology",
+                    "Serology",
+                    "Clinical Pathology",
+                    "Microbiology",
+                    "Histopathology",
+                  ].map((c) => (
+                    <option key={c} value={c}>
+                      {c}
+                    </option>
                   ))}
                 </select>
               </div>
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Sample Type *</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                  Sample Required *
+                </label>
                 <input
                   type="text"
-                  value={newTmplSampleType}
-                  onChange={e => setNewTmplSampleType(e.target.value)}
-                  placeholder="e.g. Serum, Whole Blood (EDTA)"
+                  value={tmplSampleType}
+                  onChange={(e) => setTmplSampleType(e.target.value)}
+                  placeholder="e.g. Serum, Whole Blood (EDTA), Urine"
                   className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
 
-            {/* Row 3: Section name + Description */}
-            <div className="grid grid-cols-2 gap-4">
+            {/* Row 3: Section heading + Description */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Section Heading</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                  Default Section Heading
+                </label>
                 <input
                   type="text"
-                  value={newTmplSection}
-                  onChange={e => setNewTmplSection(e.target.value)}
+                  value={tmplDefaultSection}
+                  onChange={(e) => setTmplDefaultSection(e.target.value)}
                   placeholder="e.g. Chemical Parameters"
                   className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
-                <p className="text-[10px] text-slate-400">Bold heading shown on the report above parameters.</p>
+                <p className="text-[10px] text-slate-400">
+                  Default section grouping used for test parameters.
+                </p>
               </div>
               <div className="space-y-1.5">
-                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Description</label>
+                <label className="font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">
+                  Description
+                </label>
                 <input
                   type="text"
-                  value={newTmplDescription}
-                  onChange={e => setNewTmplDescription(e.target.value)}
-                  placeholder="Short description of what this test measures"
+                  value={tmplDescription}
+                  onChange={(e) => setTmplDescription(e.target.value)}
+                  placeholder="Short description of what this diagnostic test measures"
                   className="w-full px-3 py-2 rounded-xl border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
             </div>
 
             {/* Parameters Table */}
-            <div className="space-y-3">
+            <div className="space-y-3 pt-2 border-t border-slate-200 dark:border-slate-800">
               <div className="flex items-center justify-between">
-                <label className="font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[10px]">Test Parameters *</label>
+                <div>
+                  <label className="font-black text-slate-700 dark:text-slate-300 uppercase tracking-wider text-[11px] flex items-center gap-2">
+                    <span>Test Parameters ({tmplParams.length})</span>
+                    <span className="text-[10px] font-normal lowercase text-slate-400">(reorder, rename, set units, ranges & input types)</span>
+                  </label>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setNewTmplParams(prev => [...prev, { name: "", unit: "", referenceRange: "", inputType: "NUMBER", options: "" }])}
-                  className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] inline-flex items-center gap-1 cursor-pointer"
+                  onClick={() =>
+                    setTmplParams((prev) => [
+                      ...prev,
+                      {
+                        parameterId: `param_${Date.now()}_${prev.length + 1}`,
+                        name: "",
+                        section: tmplDefaultSection || "Chemical Parameters",
+                        unit: "",
+                        referenceRange: "",
+                        inputType: "NUMBER",
+                        options: "",
+                      },
+                    ])
+                  }
+                  className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1.5 cursor-pointer shadow-sm transition-all"
                 >
-                  <Plus className="w-3 h-3" /> Add Parameter
+                  <Plus className="w-3.5 h-3.5" /> Add Parameter
                 </button>
               </div>
 
-              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden">
+              <div className="rounded-xl border border-slate-200 dark:border-slate-700 overflow-hidden bg-white dark:bg-slate-900">
                 {/* Header Row */}
-                <div className="grid grid-cols-12 gap-0 bg-slate-100 dark:bg-slate-800 px-3 py-2 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700">
-                  <div className="col-span-3">Parameter Name</div>
-                  <div className="col-span-2">Unit</div>
-                  <div className="col-span-3">Reference Range</div>
-                  <div className="col-span-2">Input Type</div>
-                  <div className="col-span-2 text-center">Remove</div>
+                <div className="grid grid-cols-12 gap-2 bg-slate-100 dark:bg-slate-800 px-3 py-2.5 text-[10px] font-black text-slate-500 uppercase tracking-wider border-b border-slate-200 dark:border-slate-700 items-center">
+                  <div className="col-span-1 text-center">Order</div>
+                  <div className="col-span-3">Parameter Name *</div>
+                  <div className="col-span-2">Section</div>
+                  <div className="col-span-1">Unit</div>
+                  <div className="col-span-2">Reference Range</div>
+                  <div className="col-span-2">Type / Options</div>
+                  <div className="col-span-1 text-center">Del</div>
                 </div>
 
-                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                  {newTmplParams.map((p, i) => (
-                    <div key={i} className="grid grid-cols-12 gap-1 px-3 py-2 items-center bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                <div className="max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {tmplParams.map((p, i) => (
+                    <div
+                      key={p.parameterId || i}
+                      className="grid grid-cols-12 gap-2 px-3 py-2.5 items-start bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                    >
+                      {/* Order / Reorder */}
+                      <div className="col-span-1 flex items-center justify-center gap-0.5 pt-1">
+                        <span className="text-[10px] font-mono text-slate-400 w-3 text-center">{i + 1}</span>
+                        <div className="flex flex-col gap-0.5">
+                          <button
+                            type="button"
+                            disabled={i === 0}
+                            onClick={() => {
+                              setTmplParams((prev) => {
+                                const copy = [...prev];
+                                const temp = copy[i - 1];
+                                copy[i - 1] = copy[i];
+                                copy[i] = temp;
+                                return copy;
+                              });
+                            }}
+                            className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded disabled:opacity-20 cursor-pointer"
+                            title="Move Up"
+                          >
+                            <ArrowUp className="w-2.5 h-2.5 text-slate-600 dark:text-slate-300" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={i === tmplParams.length - 1}
+                            onClick={() => {
+                              setTmplParams((prev) => {
+                                const copy = [...prev];
+                                const temp = copy[i + 1];
+                                copy[i + 1] = copy[i];
+                                copy[i] = temp;
+                                return copy;
+                              });
+                            }}
+                            className="p-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded disabled:opacity-20 cursor-pointer"
+                            title="Move Down"
+                          >
+                            <ArrowDown className="w-2.5 h-2.5 text-slate-600 dark:text-slate-300" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Name */}
                       <div className="col-span-3">
                         <input
                           type="text"
                           value={p.name}
-                          onChange={e => setNewTmplParams(prev => prev.map((x,j) => j===i ? {...x, name: e.target.value} : x))}
-                          placeholder="e.g. Urea"
-                          className="w-full px-2 py-1 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                          onChange={(e) =>
+                            setTmplParams((prev) =>
+                              prev.map((x, j) => (j === i ? { ...x, name: e.target.value } : x))
+                            )
+                          }
+                          placeholder="e.g. Blood Urea"
+                          className="w-full px-2.5 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-semibold"
                         />
                       </div>
+
+                      {/* Section */}
                       <div className="col-span-2">
+                        <input
+                          type="text"
+                          value={p.section}
+                          onChange={(e) =>
+                            setTmplParams((prev) =>
+                              prev.map((x, j) => (j === i ? { ...x, section: e.target.value } : x))
+                            )
+                          }
+                          placeholder="Section name"
+                          className="w-full px-2 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                        />
+                      </div>
+
+                      {/* Unit */}
+                      <div className="col-span-1">
                         <input
                           type="text"
                           value={p.unit}
-                          onChange={e => setNewTmplParams(prev => prev.map((x,j) => j===i ? {...x, unit: e.target.value} : x))}
+                          onChange={(e) =>
+                            setTmplParams((prev) =>
+                              prev.map((x, j) => (j === i ? { ...x, unit: e.target.value } : x))
+                            )
+                          }
                           placeholder="mg/dl"
-                          className="w-full px-2 py-1 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                          className="w-full px-1.5 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-mono"
                         />
                       </div>
-                      <div className="col-span-3">
+
+                      {/* Reference Range */}
+                      <div className="col-span-2">
                         <input
                           type="text"
                           value={p.referenceRange}
-                          onChange={e => setNewTmplParams(prev => prev.map((x,j) => j===i ? {...x, referenceRange: e.target.value} : x))}
-                          placeholder="e.g. 16 - 50"
-                          className="w-full px-2 py-1 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                          onChange={(e) =>
+                            setTmplParams((prev) =>
+                              prev.map((x, j) =>
+                                j === i ? { ...x, referenceRange: e.target.value } : x
+                              )
+                            )
+                          }
+                          placeholder="e.g. 15 - 45"
+                          className="w-full px-2 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-mono"
                         />
                       </div>
-                      <div className="col-span-2">
+
+                      {/* Input Type & Options */}
+                      <div className="col-span-2 space-y-1">
                         <select
                           value={p.inputType}
-                          onChange={e => setNewTmplParams(prev => prev.map((x,j) => j===i ? {...x, inputType: e.target.value as any} : x))}
-                          className="w-full px-2 py-1 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs"
+                          onChange={(e) =>
+                            setTmplParams((prev) =>
+                              prev.map((x, j) =>
+                                j === i ? { ...x, inputType: e.target.value as any } : x
+                              )
+                            )
+                          }
+                          className="w-full px-2 py-1.5 rounded-lg border bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-none focus:ring-1 focus:ring-emerald-500 text-xs font-medium"
                         >
                           <option value="NUMBER">Number</option>
                           <option value="TEXT">Text</option>
                           <option value="SELECT">Dropdown</option>
+                          <option value="HEADING">Heading Only</option>
                         </select>
                         {p.inputType === "SELECT" && (
                           <input
                             type="text"
                             value={p.options}
-                            onChange={e => setNewTmplParams(prev => prev.map((x,j) => j===i ? {...x, options: e.target.value} : x))}
-                            placeholder="Nil,+,++,+++ (comma sep)"
-                            className="w-full mt-1 px-2 py-1 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white focus:outline-none text-[10px]"
+                            onChange={(e) =>
+                              setTmplParams((prev) =>
+                                prev.map((x, j) =>
+                                  j === i ? { ...x, options: e.target.value } : x
+                                )
+                              )
+                            }
+                            placeholder="Options (e.g. Nil,+,++,+++)"
+                            className="w-full px-2 py-1 rounded-lg border bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700 text-slate-900 dark:text-white focus:outline-none text-[10px]"
                           />
                         )}
                       </div>
-                      <div className="col-span-2 text-center">
+
+                      {/* Delete */}
+                      <div className="col-span-1 text-center pt-1">
                         <button
                           type="button"
-                          onClick={() => setNewTmplParams(prev => prev.filter((_,j) => j !== i))}
-                          disabled={newTmplParams.length === 1}
+                          onClick={() => setTmplParams((prev) => prev.filter((_, j) => j !== i))}
+                          disabled={tmplParams.length === 1}
                           className="p-1.5 rounded-lg bg-rose-100 dark:bg-rose-950/40 text-rose-600 hover:bg-rose-200 disabled:opacity-30 cursor-pointer disabled:cursor-not-allowed transition-all"
+                          title="Remove Parameter"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -1973,25 +2305,33 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                   ))}
                 </div>
               </div>
-              <p className="text-[10px] text-slate-400">For Dropdown type, enter comma-separated options in the orange field below the type selector.</p>
+              <p className="text-[10px] text-slate-400">
+                Tip: Choose &quot;Dropdown&quot; for qualitative results (e.g. Positive/Negative or Nil/++/+++), or &quot;Number&quot; for automated range flagging.
+              </p>
             </div>
 
             {/* Footer Buttons */}
             <div className="flex items-center justify-between pt-3 border-t border-slate-200 dark:border-slate-700">
               <button
                 type="button"
-                onClick={() => { setIsAddTemplateModalOpen(false); setAddTmplError(""); }}
+                onClick={() => {
+                  setIsTemplateModalOpen(false);
+                  setTmplError("");
+                  setEditingTemplateCode(null);
+                }}
                 className="px-5 py-2.5 rounded-xl bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold hover:bg-slate-300 transition-all cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 type="button"
-                onClick={handleSaveNewTemplate}
+                onClick={handleSaveTemplate}
                 className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs inline-flex items-center gap-2 shadow-lg transition-all hover:-translate-y-0.5 cursor-pointer"
               >
                 <PackageCheck className="w-4 h-4" />
-                Save Template & Add to Catalog
+                <span>
+                  {editingTemplateCode ? "Save Template Changes" : "Save Template & Add to Catalog"}
+                </span>
               </button>
             </div>
           </div>

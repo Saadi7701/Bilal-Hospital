@@ -2177,12 +2177,47 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
           <div className="flex justify-end gap-3 mt-4">
             <button
               onClick={() => {
-                window.print();
+                // Open a clean popup so only the receipt prints — no sidebars, no multi-page
+                const r = printedReceipt!;
+                const win = window.open("", "_blank", "width=400,height=600,scrollbars=no");
+                if (!win) { alert("Please allow popups to print."); return; }
+                win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Receipt</title>
+<style>
+  @page { size: 80mm auto; margin: 5mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; font-size: 9.5pt; color: #000; background: #fff; margin: 0; padding: 0; width: 80mm; }
+  .center { text-align: center; }
+  .title { font-size: 13pt; font-weight: 900; }
+  .sub { font-size: 8.5pt; color: #444; }
+  .divider { border-top: 1px dashed #000; margin: 4px 0; }
+  .row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 9pt; }
+  .total { font-size: 11pt; font-weight: 900; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 3px 0; margin: 4px 0; }
+  .footer { font-size: 8pt; text-align: center; margin-top: 8px; color: #555; }
+</style></head>
+<body>
+  <div class="center">
+    <div class="title">BILAL HOSPITAL</div>
+    <div class="sub">Official Payment &amp; Admission Slip</div>
+  </div>
+  <div class="divider"></div>
+  <div class="row"><span>Slip No:</span><span><strong>${r.visitNumber}</strong></span></div>
+  <div class="row"><span>MR Number:</span><span><strong>${r.mrNumber}</strong></span></div>
+  <div class="row"><span>Patient Name:</span><span><strong>${r.patientName}</strong></span></div>
+  <div class="row"><span>Destination:</span><span>${r.destinationType || "OPD"}</span></div>
+  <div class="row"><span>Doctor / Consultant:</span><span>${r.consultantName || "-"}</span></div>
+  <div class="row"><span>Date:</span><span>${r.visitDate || new Date().toLocaleDateString()}</span></div>
+  <div class="divider"></div>
+  <div class="total row"><span>Fee Received (${r.paymentMethod || "CASH"}):</span><span>Rs. ${r.amountReceived}</span></div>
+  <div class="footer">Thank you for choosing Bilal Hospital<br/>Get well soon!</div>
+<script>window.onload=function(){setTimeout(function(){window.print();window.close();},300);};<\/script>
+</body></html>`);
+                win.document.close();
                 setPrintedReceipt(null);
               }}
               className="px-4 py-2 rounded-xl bg-brand-600 text-white font-bold text-xs"
             >
-              Print Receipt
+              🖨️ Print Receipt
             </button>
           </div>
         </Modal>

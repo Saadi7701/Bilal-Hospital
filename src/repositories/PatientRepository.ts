@@ -1,4 +1,5 @@
 import { prisma } from "../lib/prisma";
+import { generateNextMrn } from "../lib/mrnService";
 
 export class PatientRepository {
   async findByMrNumber(mrNumber: string): Promise<any> {
@@ -18,6 +19,12 @@ export class PatientRepository {
   }
 
   async createPatient(patientData: any): Promise<any> {
+    // ── MRN is generated HERE — the caller never supplies it ──────────────────
+    // generateNextMrn() uses a SELECT FOR UPDATE row lock on the MrnCounter
+    // singleton inside a Prisma transaction, guaranteeing sequential, unique MRNs
+    // even under simultaneous registrations from multiple portals.
+    const mrNumber = await generateNextMrn();
+
     let createdBy = patientData.createdBy ? patientData.createdBy.toString() : null;
 
     // Ensure createdBy references a valid user in PostgreSQL
@@ -51,7 +58,7 @@ export class PatientRepository {
 
     const patient = await prisma.patient.create({
       data: {
-        mrNumber: patientData.mrNumber.trim(),
+        mrNumber,
         fullName: patientData.fullName,
         fatherHusbandName: patientData.fatherHusbandName || null,
         gender: patientData.gender,

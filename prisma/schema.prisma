@@ -888,3 +888,16 @@ model LabTestTemplate {
   updatedAt           DateTime @updatedAt
 }
 
+// ─────────────────────────────────────────────────────────────────
+// MRN SEQUENCE COUNTER
+// Singleton table (always exactly one row: id = "singleton").
+// generateNextMrn() locks this row with SELECT ... FOR UPDATE inside
+// a Prisma $transaction so concurrent calls never produce the same value.
+// Seeded to 1014 = current maximum; first new patient gets 1015 → MR-2026-1015.
+// ─────────────────────────────────────────────────────────────────
+
+model MrnCounter {
+  id        String   @id @default("singleton")
+  lastMrn   Int      @default(1014)
+  updatedAt DateTime @updatedAt
+}

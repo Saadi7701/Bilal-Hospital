@@ -58,17 +58,14 @@ export async function POST(req: Request) {
       );
     }
 
-    let mrNumber = body.mrNumber || `MR-${Date.now().toString().slice(-6)}`;
-    const existing = await patientRepository.findByMrNumber(mrNumber);
-    if (existing) {
-      mrNumber = `MR-${Date.now().toString().slice(-6)}-${Math.floor(Math.random() * 1000)}`;
-    }
+    // Note: mrNumber is intentionally NOT read from body.
+    // It is generated atomically by PatientRepository.createPatient()
+    // via the centralized MrnCounter sequence — never supplied by the client.
 
     const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
     const createdBy = adminUser ? adminUser.id : "";
 
     const newPatient = await patientRepository.createPatient({
-      mrNumber,
       fullName: body.fullName,
       fatherHusbandName: body.fatherOrHusbandName || body.fatherHusbandName || "",
       age: Number(body.age) || 30,
@@ -80,7 +77,7 @@ export async function POST(req: Request) {
       createdBy,
     });
 
-    console.log(`[Supabase PG Success] Patient ${newPatient.fullName} (${newPatient.mrNumber}) saved to PostgreSQL!`);
+    console.log(`[Supabase PG] Patient ${newPatient.fullName} assigned MRN ${newPatient.mrNumber} — saved to PostgreSQL.`);
 
     return NextResponse.json(
       { message: "Patient registered successfully", patient: newPatient },
@@ -98,4 +95,5 @@ export async function POST(req: Request) {
     );
   }
 }
+
 

@@ -11,24 +11,18 @@ export class LabRepository {
       where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: orderData.mrNumber || patientId }] },
     });
 
-    // If still not found (e.g. fake frontend ID like "pat-xxx"), upsert by MR number
-    if (!patientObj && orderData.mrNumber) {
-      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } });
-      patientObj = await prisma.patient.upsert({
-        where: { mrNumber: orderData.mrNumber },
-        update: {},
-        create: {
-          mrNumber: orderData.mrNumber,
-          fullName: orderData.patientName || "Patient",
-          age: Number(orderData.age) || 30,
-          gender: (orderData.gender || "MALE").toUpperCase(),
-          phone: "0000000000",
-          createdBy: adminUser?.id || "",
-        },
-      });
+    // If the patient is still not found, reject the request.
+    // Phantom patient creation with client-supplied MRNs is explicitly forbidden —
+    // all patients must be registered through the centralized patient creation endpoint
+    // which assigns sequential MRNs via generateNextMrn().
+    if (!patientObj) {
+      throw new Error(
+        `[LabRepository] Patient not found for id="${patientId}" / mrNumber="${orderData.mrNumber}". ` +
+        `Please register the patient via the Receptionist Portal first.`
+      );
     }
 
-    if (patientObj) patientId = patientObj.id;
+    patientId = patientObj.id;
 
     if (visitId) {
       const visitObj = await prisma.patientVisit.findFirst({

@@ -65,6 +65,7 @@ import {
 import { labTemplateEngine } from "../../lib/labTemplateEngine";
 import { labPdfReportGenerator } from "../../lib/pdfReportGenerator";
 import { toPKTDateString } from "../../lib/dateUtils";
+import { createPatientApi } from "../../lib/apiClient";
 
 interface LabPortalProps {
   activeTab: string;
@@ -361,13 +362,11 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   };
 
   // Launch New Requisition & Prompt Result Entry
-  const handleConfirmNewRequisition = () => {
+  const handleConfirmNewRequisition = async () => {
     const patientName = selectedPatientForNew ? selectedPatientForNew.fullName : customPatientName.trim();
-    const mrn = selectedPatientForNew ? selectedPatientForNew.mrNumber : customMrn.trim();
-    const cnic = selectedPatientForNew ? selectedPatientForNew.cnic : customCnic.trim();
 
-    if (!patientName || !mrn) {
-      alert("Please select an existing patient or enter Patient MRN and Full Name.");
+    if (!patientName) {
+      alert("Please select an existing patient or enter Patient Full Name.");
       return;
     }
 
@@ -376,14 +375,48 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       return;
     }
 
+    let finalPatientId: string;
+    let finalMrn: string;
+    let finalCnic: string;
+
+    if (selectedPatientForNew) {
+      // Existing registered patient — use their DB ID and MRN directly
+      finalPatientId = selectedPatientForNew.id;
+      finalMrn = selectedPatientForNew.mrNumber;
+      finalCnic = selectedPatientForNew.cnic || "";
+    } else {
+      // Manual entry — register via centralized patient API first to get a real sequential MRN
+      const registeredPatient = await createPatientApi({
+        id: "",
+        mrNumber: "",
+        fullName: customPatientName.trim(),
+        fatherHusbandName: "",
+        age: customAge,
+        gender: customGender,
+        phone: "0300-0000000",  // Placeholder; receptionist can update later
+        cnic: customCnic.trim() || "",
+        bloodGroup: "UNKNOWN",
+        registrationDate: new Date().toISOString().split("T")[0],
+      });
+
+      if (!registeredPatient) {
+        alert("Failed to register new patient. Please try again or register via the Receptionist Portal.");
+        return;
+      }
+
+      finalPatientId = registeredPatient.id;
+      finalMrn = registeredPatient.mrNumber;
+      finalCnic = registeredPatient.cnic || customCnic.trim();
+    }
+
     const newOrderNumber = `LAB-${Date.now().toString().slice(-8)}${Math.floor(10 + Math.random() * 90)}`;
     const newOrder: LabOrderRecord = {
       id: `lab-${Date.now()}`,
       orderNumber: newOrderNumber,
-      patientId: selectedPatientForNew ? selectedPatientForNew.id : `pat-${Date.now()}`,
+      patientId: finalPatientId,
       patientName: patientName,
-      mrNumber: mrn,
-      cnic: cnic,
+      mrNumber: finalMrn,
+      cnic: finalCnic,
       age: customAge,
       gender: customGender,
       visitId: `vst-direct-${Date.now()}`,

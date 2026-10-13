@@ -38,7 +38,7 @@ export async function fetchPatientsFromApi(): Promise<PatientRecord[]> {
   }
 }
 
-export async function createPatientApi(patient: PatientRecord): Promise<boolean> {
+export async function createPatientApi(patient: PatientRecord): Promise<PatientRecord | null> {
   try {
     const res = await fetch("/api/patients", {
       method: "POST",
@@ -49,18 +49,38 @@ export async function createPatientApi(patient: PatientRecord): Promise<boolean>
     if (!res.ok) {
       console.error("[API Client Error] Save patient failed:", data.error);
       if (typeof window !== "undefined") {
-        alert(`Database Save Error: ${data.error || "Failed to save patient to MongoDB"}`);
+        alert(`Database Save Error: ${data.error || "Failed to save patient to database"}`);
       }
-      return false;
+      return null;
     }
-    console.log("[API Client Success] Patient saved to MongoDB Atlas:", data.patient);
-    return true;
+
+    // Map the DB-returned patient to the frontend PatientRecord shape
+    const p = data.patient;
+    if (!p) return null;
+
+    console.log(`[API Client] Patient registered — DB-assigned MRN: ${p.mrNumber}`);
+    return {
+      id: p._id || p.id,
+      mrNumber: p.mrNumber,           // ← real sequential MRN from the DB
+      fullName: p.fullName,
+      fatherHusbandName: p.fatherHusbandName || p.fatherOrHusbandName || "",
+      age: p.age,
+      gender: p.gender,
+      phone: p.phone,
+      cnic: p.cnic || "",
+      address: p.address || "",
+      bloodGroup: p.bloodGroup || "UNKNOWN",
+      notes: p.notes || "",
+      registrationDate: p.createdAt
+        ? new Date(p.createdAt).toISOString().split("T")[0]
+        : new Date().toISOString().split("T")[0],
+    };
   } catch (err: any) {
     console.error("[API Client Error] Save patient exception:", err.message);
     if (typeof window !== "undefined") {
       alert(`Database Network Error: ${err.message}`);
     }
-    return false;
+    return null;
   }
 }
 

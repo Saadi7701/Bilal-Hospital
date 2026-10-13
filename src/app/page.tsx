@@ -146,14 +146,27 @@ export default function Home() {
   };
 
   // Real-Time DB Handlers
-  const handleAddPatient = async (patient: PatientRecord) => {
+  const handleAddPatient = async (patient: PatientRecord): Promise<PatientRecord | null> => {
     setPatients((prev) => [patient, ...prev]);
-    // Map frontend PatientRecord to the shape the API expects
-    await createPatientApi({
+    // createPatientApi now returns the DB-created patient with the real sequential MRN
+    const registeredPatient = await createPatientApi({
       ...patient,
       fatherOrHusbandName: patient.fatherHusbandName,
     } as any);
+
+    if (registeredPatient && registeredPatient.mrNumber) {
+      // Replace the optimistic entry (which had a placeholder MRN) with the real one
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patient.id ? { ...p, mrNumber: registeredPatient.mrNumber, id: registeredPatient.id } : p
+        )
+      );
+      loadDynamicData();
+      return registeredPatient;
+    }
+
     loadDynamicData();
+    return null;
   };
 
   const handleAddVisit = async (visit: VisitRecord, transaction: CashTransactionRecord) => {

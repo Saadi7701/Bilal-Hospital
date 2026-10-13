@@ -89,7 +89,7 @@ interface ReceptionistPortalProps {
   patients: PatientRecord[];
   visits: VisitRecord[];
   admissions: AdmissionRecord[];
-  onAddPatient: (patient: PatientRecord) => void;
+  onAddPatient: (patient: PatientRecord) => Promise<PatientRecord | null>;
   onAddVisit: (visit: VisitRecord, transaction: CashTransactionRecord) => void;
   onAddAdmission: (admission: AdmissionRecord, transaction: CashTransactionRecord) => void;
   onDischargePatient: (
@@ -293,15 +293,14 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
   });
 
   // Handle New Patient Register Form Submission
-  const handleRegisterPatientSubmit = (e: React.FormEvent) => {
+  const handleRegisterPatientSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newPatient.fullName || !newPatient.phone) return;
 
-    const generatedMr = `MR-${new Date().getFullYear()}-${String(patients.length + 1001).padStart(4, "0")}`;
-
-    const created: PatientRecord = {
+    // Build a temporary optimistic record — MRN is a placeholder until the backend responds
+    const tempPatient: PatientRecord = {
       id: `pat-${Date.now()}`,
-      mrNumber: generatedMr,
+      mrNumber: "Registering...",
       fullName: newPatient.fullName,
       fatherHusbandName: newPatient.fatherHusbandName,
       gender: newPatient.gender,
@@ -313,9 +312,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       registrationDate: new Date().toISOString().split("T")[0],
     };
 
-    onAddPatient(created);
     setIsRegisterModalOpen(false);
-    setSelectedPatientForVisit(created);
     setNewPatient({
       fullName: "",
       fatherHusbandName: "",
@@ -326,6 +323,12 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       bloodGroup: "B+",
       notes: "",
     });
+
+    // Call backend — returns the patient with the real DB-assigned MRN
+    const registeredPatient = await onAddPatient(tempPatient);
+
+    // Use the patient with the real MRN for any subsequent visit / lab dispatch
+    setSelectedPatientForVisit(registeredPatient || tempPatient);
   };
 
   // Handle All-In-One Intake Submission

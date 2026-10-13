@@ -14,6 +14,7 @@ export class HospitalFormsRepository {
     let visitId: string | null = data.visitId ? data.visitId.toString() : null;
     let createdById: string | null = data.createdById ? data.createdById.toString() : null;
 
+    // Attempt to resolve the patient by ID or MR number
     let patientObj: any = null;
     if (patientId) {
       patientObj = await prisma.patient.findFirst({
@@ -21,46 +22,25 @@ export class HospitalFormsRepository {
       }).catch(() => null);
     }
 
+    // Secondary lookup by mrNumber alone (when patientId is a placeholder or missing)
+    if (!patientObj && data.mrNumber) {
+      patientObj = await prisma.patient.findFirst({
+        where: { mrNumber: data.mrNumber },
+      }).catch(() => null);
+    }
+
+    // If the patient still cannot be resolved, reject the request.
+    // Creating phantom patients with fallback MRNs is explicitly forbidden —
+    // all patients must be registered via the Receptionist Portal (centralised MRN generation).
     if (!patientObj) {
-      const adminUser = await prisma.user.findFirst({ where: { role: "ADMIN" } }).catch(() => null);
-      const pName = data.patientName || data.fullName || (data.patient ? data.patient.fullName : "Hospital Patient");
-      const pMrn = data.mrNumber || data.opdErMrNo || (data.patient ? data.patient.mrNumber : null) || `MR-${Date.now().toString().slice(-6)}`;
-      const pPhone = data.phone || (data.patient ? data.patient.phone : "03000000000");
-      const pCnic = data.cnic || (data.patient ? data.patient.cnic : null);
-
-      try {
-        patientObj = await prisma.patient.upsert({
-          where: { mrNumber: pMrn },
-          update: {},
-          create: {
-            mrNumber: pMrn,
-            fullName: pName,
-            age: Number(data.age || (data.patient ? data.patient.age : 30)) || 30,
-            gender: (data.gender || (data.patient ? data.patient.gender : "MALE") || "MALE").toUpperCase(),
-            phone: pPhone,
-            cnic: pCnic && pCnic.trim() ? pCnic.trim() : null,
-            createdBy: adminUser?.id || "",
-          },
-        });
-      } catch (upsertErr: any) {
-        // Fallback: create patient with unique timestamp MRN if duplicate MRN conflict occurs
-        const fallbackMrn = `MR-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
-        patientObj = await prisma.patient.create({
-          data: {
-            mrNumber: fallbackMrn,
-            fullName: pName,
-            age: Number(data.age) || 30,
-            gender: "MALE",
-            phone: pPhone,
-            createdBy: adminUser?.id || "",
-          },
-        }).catch(() => null);
-      }
+      throw new Error(
+        `[HospitalFormsRepository] Patient not found for ` +
+        `patientId="${patientId}", mrNumber="${data.mrNumber || ""}". ` +
+        `Register the patient via the Receptionist Portal first.`
+      );
     }
 
-    if (patientObj) {
-      patientId = patientObj.id;
-    }
+    patientId = patientObj.id;
 
     if (visitId) {
       const visitObj = await prisma.patientVisit.findFirst({
@@ -78,6 +58,7 @@ export class HospitalFormsRepository {
 
     return { patientId, visitId, createdById };
   }
+
 
   // --- REFERRAL FORM ---
   async createReferralForm(data: any) {

@@ -152,13 +152,23 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
   };
 
   // Real-Time DB Handlers (CRUD operations with zero mock data)
-  const handleAddPatient = async (patient: PatientRecord) => {
+  const handleAddPatient = async (patient: PatientRecord): Promise<PatientRecord | null> => {
     setPatients((prev) => [patient, ...prev]);
-    await createPatientApi({
+    const registeredPatient = await createPatientApi({
       ...patient,
       fatherOrHusbandName: patient.fatherHusbandName,
     } as any);
+    if (registeredPatient && registeredPatient.mrNumber) {
+      setPatients((prev) =>
+        prev.map((p) =>
+          p.id === patient.id ? { ...p, mrNumber: registeredPatient.mrNumber, id: registeredPatient.id } : p
+        )
+      );
+      loadDynamicData();
+      return registeredPatient;
+    }
     loadDynamicData();
+    return null;
   };
 
   const handleAddVisit = async (visit: VisitRecord, transaction: CashTransactionRecord) => {

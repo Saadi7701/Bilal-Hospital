@@ -1475,142 +1475,165 @@ export const LabPortal: React.FC<LabPortalProps> = ({
               )}
             </div>
 
-            {/* 2. Select Test Template */}
+            {/* 2. Select Test Template — Dropdown Multi-Select */}
             <div className="space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 dark:border-slate-800 pb-2">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2">
                 <div>
                   <label className="font-black uppercase tracking-wider text-slate-700 dark:text-slate-200 text-xs block">
-                    2. Select Laboratory Test Template(s) ({selectedTestCodesForNew.length} Selected)
+                    2. Select Laboratory Test(s)
+                    {selectedTestCodesForNew.length > 0 && (
+                      <span className="ml-2 px-2 py-0.5 rounded-md bg-amber-500 text-slate-950 text-[10px] font-black">
+                        {selectedTestCodesForNew.length} selected
+                      </span>
+                    )}
                   </label>
-                  <p className="text-[11px] text-slate-500">
-                    All 19 Excel lab templates registered in <code className="font-mono text-amber-600">lab_templates</code> folder.
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    Search and select from all available pathology lab tests.
                   </p>
                 </div>
-
-                {/* Quick Select & Clear Controls */}
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const allFilteredCodes = DEFAULT_LAB_TEMPLATES.filter((t) => {
-                        const matchesCategory = newReqCategoryFilter === "ALL" || t.category === newReqCategoryFilter;
-                        const q = newReqTemplateSearch.toLowerCase().trim();
-                        return matchesCategory && (!q || t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q));
-                      }).map((t) => t.code);
-                      setSelectedTestCodesForNew(Array.from(new Set([...selectedTestCodesForNew, ...allFilteredCodes])));
-                    }}
-                    className="px-2.5 py-1 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-400 border border-amber-300 dark:border-amber-800 text-[11px] font-bold hover:bg-amber-100"
-                  >
-                    Select Visible ({DEFAULT_LAB_TEMPLATES.filter((t) => {
-                      const matchesCategory = newReqCategoryFilter === "ALL" || t.category === newReqCategoryFilter;
-                      const q = newReqTemplateSearch.toLowerCase().trim();
-                      return matchesCategory && (!q || t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q));
-                    }).length})
-                  </button>
+                {selectedTestCodesForNew.length > 0 && (
                   <button
                     type="button"
                     onClick={() => setSelectedTestCodesForNew([])}
-                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold hover:bg-slate-200"
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[11px] font-bold hover:bg-slate-200 shrink-0"
                   >
                     Clear All
                   </button>
-                </div>
+                )}
               </div>
 
-              {/* Search Box & Department Category Filter Pills */}
-              <div className="space-y-2">
-                <div className="relative">
-                  <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search all 19 templates by code, test name, or Excel file (e.g. CBC, ALT, RFT, Urine)..."
-                    value={newReqTemplateSearch}
-                    onChange={(e) => setNewReqTemplateSearch(e.target.value)}
-                    className="w-full pl-8 pr-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800 border text-xs focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-white"
-                  />
-                </div>
-
-                <div className="flex flex-wrap gap-1.5">
-                  {["ALL", "Hematology", "Biochemistry", "Serology", "Clinical Pathology", "Microbiology"].map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setNewReqCategoryFilter(cat)}
-                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all ${
-                        newReqCategoryFilter === cat
-                          ? "bg-amber-500 text-slate-950 shadow-sm"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Template Selection Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 max-h-72 sm:max-h-80 overflow-y-auto p-1 border rounded-xl bg-slate-50/50 dark:bg-slate-950/40">
-                {DEFAULT_LAB_TEMPLATES.filter((t) => {
-                  const matchesCategory = newReqCategoryFilter === "ALL" || t.category === newReqCategoryFilter;
-                  const q = newReqTemplateSearch.toLowerCase().trim();
-                  const matchesSearch =
-                    !q ||
-                    t.code.toLowerCase().includes(q) ||
-                    t.name.toLowerCase().includes(q) ||
-                    (t.fullForm && t.fullForm.toLowerCase().includes(q)) ||
-                    (t.templateFileName && t.templateFileName.toLowerCase().includes(q));
-                  return matchesCategory && matchesSearch;
-                }).map((tmpl) => {
-                  const isChecked = selectedTestCodesForNew.includes(tmpl.code);
-                  return (
-                    <label
-                      key={tmpl.code}
-                      className={`p-3 rounded-xl border cursor-pointer flex flex-col justify-between transition-all ${
-                        isChecked
-                          ? "bg-amber-50 dark:bg-amber-950/40 border-amber-500 ring-2 ring-amber-500/50 shadow-sm"
-                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 hover:border-amber-400"
-                      }`}
-                    >
-                      <div className="space-y-1.5">
-                        <div className="flex items-center justify-between">
-                          <span className="px-2 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-mono font-black text-[11px]">
-                            {tmpl.code}
-                          </span>
-                          <input
-                            type="checkbox"
-                            checked={isChecked}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setSelectedTestCodesForNew([...selectedTestCodesForNew, tmpl.code]);
-                              } else {
-                                setSelectedTestCodesForNew(selectedTestCodesForNew.filter((c) => c !== tmpl.code));
-                              }
-                            }}
-                            className="w-4 h-4 accent-amber-600 rounded cursor-pointer"
-                          />
-                        </div>
-                        <div className="font-bold text-slate-900 dark:text-white text-xs leading-snug line-clamp-2">
-                          {tmpl.name}
-                        </div>
-                        <div className="text-[10px] text-slate-500 dark:text-slate-400 flex items-center gap-1 font-mono">
-                          <FileSpreadsheet className="w-3 h-3 text-emerald-500 shrink-0" />
-                          <span className="truncate text-emerald-600 dark:text-emerald-400 font-semibold">{tmpl.templateFileName || `${tmpl.name}.xls`}</span>
-                        </div>
+              {/* Dropdown select */}
+              <div className="relative">
+                <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400 pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Search tests (e.g. CBC, LFT, Urine, Blood...)" 
+                  value={newReqTemplateSearch}
+                  onChange={(e) => setNewReqTemplateSearch(e.target.value)}
+                  className="w-full pl-8 pr-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border text-xs focus:ring-2 focus:ring-amber-500 text-slate-900 dark:text-white"
+                />
+                {/* Dropdown list */}
+                {newReqTemplateSearch.trim() !== "" && (
+                  <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-xl max-h-52 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-700">
+                    {DEFAULT_LAB_TEMPLATES.filter((t) => {
+                      const q = newReqTemplateSearch.toLowerCase().trim();
+                      return (
+                        t.code.toLowerCase().includes(q) ||
+                        t.name.toLowerCase().includes(q) ||
+                        (t.fullForm && t.fullForm.toLowerCase().includes(q)) ||
+                        t.category.toLowerCase().includes(q)
+                      );
+                    }).map((tmpl) => {
+                      const isChecked = selectedTestCodesForNew.includes(tmpl.code);
+                      return (
+                        <button
+                          key={tmpl.code}
+                          type="button"
+                          onClick={() => {
+                            if (isChecked) {
+                              setSelectedTestCodesForNew(selectedTestCodesForNew.filter((c) => c !== tmpl.code));
+                            } else {
+                              setSelectedTestCodesForNew([...selectedTestCodesForNew, tmpl.code]);
+                            }
+                            setNewReqTemplateSearch("");
+                          }}
+                          className={`w-full px-3 py-2.5 text-left flex items-center justify-between gap-3 transition-colors ${
+                            isChecked
+                              ? "bg-amber-50 dark:bg-amber-950/40"
+                              : "hover:bg-slate-50 dark:hover:bg-slate-700"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <span className="px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-700 dark:text-amber-400 font-mono font-black text-[10px] shrink-0">
+                              {tmpl.code}
+                            </span>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-slate-900 dark:text-white text-xs truncate">{tmpl.name}</div>
+                              <div className="text-[10px] text-slate-400">{tmpl.category}</div>
+                            </div>
+                          </div>
+                          {isChecked && (
+                            <CheckCircle2 className="w-4 h-4 text-amber-500 shrink-0" />
+                          )}
+                        </button>
+                      );
+                    })}
+                    {DEFAULT_LAB_TEMPLATES.filter((t) => {
+                      const q = newReqTemplateSearch.toLowerCase().trim();
+                      return t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || (t.fullForm && t.fullForm.toLowerCase().includes(q)) || t.category.toLowerCase().includes(q);
+                    }).length === 0 && (
+                      <div className="px-4 py-5 text-center text-slate-400 text-xs">
+                        No tests match "{newReqTemplateSearch}"
                       </div>
-                    </label>
-                  );
-                })}
-
-                {DEFAULT_LAB_TEMPLATES.filter((t) => {
-                  const matchesCategory = newReqCategoryFilter === "ALL" || t.category === newReqCategoryFilter;
-                  const q = newReqTemplateSearch.toLowerCase().trim();
-                  return matchesCategory && (!q || t.code.toLowerCase().includes(q) || t.name.toLowerCase().includes(q) || (t.templateFileName && t.templateFileName.toLowerCase().includes(q)));
-                }).length === 0 && (
-                  <div className="col-span-full py-8 text-center text-slate-400 text-xs">
-                    No lab templates match your search query "{newReqTemplateSearch}". Clear search to view all 19 templates.
+                    )}
                   </div>
                 )}
               </div>
+
+              {/* Show all tests when search is empty — compact dropdown */}
+              {newReqTemplateSearch.trim() === "" && (
+                <div className="relative">
+                  <select
+                    onChange={(e) => {
+                      const code = e.target.value;
+                      if (!code) return;
+                      if (!selectedTestCodesForNew.includes(code)) {
+                        setSelectedTestCodesForNew([...selectedTestCodesForNew, code]);
+                      }
+                      e.target.value = "";
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 border text-xs font-medium text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-500 cursor-pointer"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>— Click to add a test —</option>
+                    {["ALL", "Hematology", "Biochemistry", "Serology", "Clinical Pathology", "Microbiology"].map((cat) => {
+                      const testsInCat = DEFAULT_LAB_TEMPLATES.filter((t) => cat === "ALL" ? true : t.category === cat);
+                      if (cat === "ALL") return null;
+                      return (
+                        <optgroup key={cat} label={`── ${cat} ──`}>
+                          {testsInCat.map((tmpl) => (
+                            <option
+                              key={tmpl.code}
+                              value={tmpl.code}
+                              disabled={selectedTestCodesForNew.includes(tmpl.code)}
+                            >
+                              {selectedTestCodesForNew.includes(tmpl.code) ? "✓ " : ""}{tmpl.code} — {tmpl.name}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              {/* Selected tests as removable pills */}
+              {selectedTestCodesForNew.length > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40">
+                  <div className="text-[10px] font-bold uppercase text-amber-700 dark:text-amber-400 mb-2">Selected Tests:</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {selectedTestCodesForNew.map((code) => {
+                      const tmpl = DEFAULT_LAB_TEMPLATES.find((t) => t.code === code);
+                      return (
+                        <span
+                          key={code}
+                          className="inline-flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-amber-300 dark:border-amber-700 text-xs font-bold text-slate-800 dark:text-white shadow-sm"
+                        >
+                          <span className="text-amber-600 font-mono text-[10px] font-black">{code}</span>
+                          <span className="text-slate-600 dark:text-slate-300">{tmpl?.name || code}</span>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedTestCodesForNew(selectedTestCodesForNew.filter((c) => c !== code))}
+                            className="w-4 h-4 rounded-full bg-slate-200 dark:bg-slate-700 hover:bg-rose-100 hover:text-rose-600 flex items-center justify-center text-slate-500 transition-colors cursor-pointer text-[10px] font-black leading-none"
+                          >
+                            ×
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Modal Actions */}

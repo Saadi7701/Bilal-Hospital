@@ -125,6 +125,10 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [customConsultant, setCustomConsultant] = useState("Dr. Self / Direct Lab Request");
   const [selectedTestCodesForNew, setSelectedTestCodesForNew] = useState<string[]>(["CBC"]);
 
+  // Auto-fetched next sequential MRN (read-only preview — actual MRN assigned on backend)
+  const [nextMrn, setNextMrn] = useState<string>("Loading...");
+  const [isFetchingMrn, setIsFetchingMrn] = useState(false);
+
   // Test Catalog ("Test's List") State
   const [catalogSearchQuery, setCatalogSearchQuery] = useState("");
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState("ALL");
@@ -217,6 +221,19 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       })
       .catch(() => {});
   }, [showArchivedTab]);
+
+  // Fetch next MRN preview whenever the new requisition modal opens
+  useEffect(() => {
+    if (!isCreateNewModalOpen) return;
+    setIsFetchingMrn(true);
+    fetch("/api/patients/next-mrn")
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.nextMrn) setNextMrn(data.nextMrn);
+      })
+      .catch(() => setNextMrn("Auto-assigned"))
+      .finally(() => setIsFetchingMrn(false));
+  }, [isCreateNewModalOpen]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -1375,7 +1392,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
           isOpen
           onClose={() => setIsCreateNewModalOpen(false)}
           title="Create New Laboratory Test Requisition"
-          subtitle="Select existing patient or enter MRN, Name, CNIC, Age & Gender, then select from all 19 pathology lab templates."
+          subtitle="Select existing patient or enter Name, CNIC, Age & Gender, then select lab tests. MRN is auto-assigned sequentially."
           maxWidth="4xl"
         >
           <div className="space-y-6 text-xs">
@@ -1445,15 +1462,31 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border">
+                  {/* AUTO-FILL MRN — READ ONLY — assigned by backend on confirmation */}
                   <div>
-                    <label className="font-bold block mb-1">Patient MRN *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. MRN-2026-904"
-                      value={customMrn}
-                      onChange={(e) => setCustomMrn(e.target.value)}
-                      className="w-full px-3 py-1.5 rounded-lg border font-mono font-bold bg-white dark:bg-slate-900 text-slate-900 dark:text-white"
-                    />
+                    <label className="font-bold block mb-1 text-slate-700 dark:text-slate-300">
+                      Patient MRN
+                      <span className="ml-2 px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-900/40 text-emerald-700 dark:text-emerald-400 text-[9px] font-black uppercase">
+                        Auto-Assigned
+                      </span>
+                    </label>
+                    <div className={`w-full px-3 py-1.5 rounded-lg border-2 font-mono font-black text-sm flex items-center gap-2
+                      ${ isFetchingMrn
+                        ? 'border-slate-200 bg-slate-50 dark:bg-slate-900 text-slate-400'
+                        : 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 text-emerald-700 dark:text-emerald-400'
+                      }`}>
+                      {isFetchingMrn ? (
+                        <span className="animate-pulse">Fetching MRN...</span>
+                      ) : (
+                        <>
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                          {nextMrn}
+                        </>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-slate-400 mt-1">
+                      Sequential MRN auto-assigned from database — cannot be changed manually.
+                    </p>
                   </div>
                   <div>
                     <label className="font-bold block mb-1">Patient Full Name *</label>

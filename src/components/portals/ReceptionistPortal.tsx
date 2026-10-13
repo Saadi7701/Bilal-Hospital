@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Search,
   UserPlus,
@@ -134,6 +134,19 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       (newPatient.phone && p.phone === newPatient.phone) ||
       (newPatient.cnic && p.cnic === newPatient.cnic)
   );
+
+  // Auto-fetched next sequential MRN preview for registration modal
+  const [nextMrnPreview, setNextMrnPreview] = useState<string>("Loading...");
+  const [isFetchingMrnPreview, setIsFetchingMrnPreview] = useState(false);
+  useEffect(() => {
+    if (!isRegisterModalOpen) return;
+    setIsFetchingMrnPreview(true);
+    fetch("/api/patients/next-mrn")
+      .then((r) => r.json())
+      .then((data) => { if (data.nextMrn) setNextMrnPreview(data.nextMrn); })
+      .catch(() => setNextMrnPreview("Auto-assigned"))
+      .finally(() => setIsFetchingMrnPreview(false));
+  }, [isRegisterModalOpen]);
 
   // ALL-IN-ONE INTAKE FORM STATE
   const [destinationType, setDestinationType] = useState<
@@ -1560,6 +1573,25 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
               Duplicate Warning: Phone {duplicateMatch.phone} already registered under MR {duplicateMatch.mrNumber}!
             </div>
           )}
+
+          {/* AUTO-FILL MRN PREVIEW */}
+          <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-400 dark:border-emerald-700 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 block">
+                Auto-Assigned Medical Record Number (MRN)
+              </span>
+              <span className="font-mono font-black text-lg text-emerald-700 dark:text-emerald-300 flex items-center gap-2 mt-0.5">
+                {isFetchingMrnPreview ? (
+                  <span className="animate-pulse text-sm text-slate-400">Fetching next MRN...</span>
+                ) : (
+                  <><span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse" />{nextMrnPreview}</>
+                )}
+              </span>
+            </div>
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-black uppercase">
+              Sequential
+            </span>
+          </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>

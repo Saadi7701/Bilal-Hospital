@@ -71,7 +71,7 @@ interface LabPortalProps {
   activeTab: string;
   labOrders: LabOrderRecord[];
   patients?: PatientRecord[];
-  onAddLabOrder?: (order: LabOrderRecord, transaction?: any) => void;
+  onAddLabOrder?: (order: LabOrderRecord, transaction?: any) => Promise<LabOrderRecord | null> | LabOrderRecord | null;
   onSubmitLabResult: (
     labOrderId: string,
     resultsJson: string,
@@ -97,7 +97,6 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [selectedOrderForResult, setSelectedOrderForResult] = useState<LabOrderRecord | null>(null);
   const [activeTemplate, setActiveTemplate] = useState<LabTemplateDef | null>(null);
   const [viewingOrderModal, setViewingOrderModal] = useState<LabOrderRecord | null>(null);
-  const [printPreviewHtml, setPrintPreviewHtml] = useState<string | null>(null);
 
   // Patient Identity Verification State
   const [identityConfirmed, setIdentityConfirmed] = useState(false);
@@ -307,11 +306,15 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       });
 
       const data = await res.json();
-      if (res.ok) {
-        console.log("Lab report finalized:", data);
+      if (!res.ok) {
+        alert(data.error || "Could not finalize this report. The requisition has been saved; please retry.");
+        return;
       }
+      console.log("Lab report finalized:", data);
     } catch (err) {
       console.error("Finalization error:", err);
+      alert("Could not finalize this report due to a network error. The requisition has been saved; please retry.");
+      return;
     }
 
     // Call frontend handler to update master state
@@ -327,13 +330,14 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       onUpdateLabOrderStatus(selectedOrderForResult.id, targetStatus);
     }
 
-    // Generate HTML print preview if requested
+    // Direct print the report without opening a custom application preview screen.
     if (actionType === "PRINT" || actionType === "BOTH") {
-      handleGeneratePrintPreview({
+      const finalOrderForPrint = {
         ...selectedOrderForResult,
         resultsV1: JSON.stringify(formResults),
         status: targetStatus,
-      });
+      };
+      openDirectPrintWindow(handleGeneratePrintHtml(finalOrderForPrint));
     }
 
     setIsActionDropdownOpen(false);
@@ -341,8 +345,8 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     setUploadedImageBase64(undefined);
   };
 
-  // Generate Print Preview HTML
-  const handleGeneratePrintPreview = (order: LabOrderRecord) => {
+  // Build print-ready report HTML for a direct browser print popup
+  const handleGeneratePrintHtml = (order: LabOrderRecord): string => {
     const testCode = order.tests && order.tests[0] ? order.tests[0] : "CBC";
     const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
 
@@ -355,7 +359,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
     const evaluated = labTemplateEngine.evaluateAllResults(tmpl, resultsObj);
 
-    const html = labPdfReportGenerator.generateHtmlReport({
+    return labPdfReportGenerator.generateHtmlReport({
       reportId: `LABREP-${order.orderNumber}`,
       orderNumber: order.orderNumber,
       patientName: order.patientName,
@@ -374,8 +378,104 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       evaluatedResults: evaluated,
       versionNumber: order.currentVersion || 1,
     });
+  };
 
-    setPrintPreviewHtml(html);
+  const openDirectPrintWindow = (html: string) => {
+    const printFrame = document.createElement("iframe");
+    printFrame.setAttribute("aria-hidden", "true");
+    printFrame.title = "Lab report print frame";
+    printFrame.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;visibility:visible";
+    document.body.appendChild(printFrame);
+
+    const printDocument = printFrame.contentDocument;
+    const printWindow = printFrame.contentWindow;
+    if (!printDocument || !printWindow) {
+      printFrame.remove();
+      alert("Could not prepare the report for printing. Please try again.");
+      return;
+    }
+
+    const pageCss = `
+      @page { size: A4 portrait; margin: 0 !important; }
+      *, *::before, *::after { box-sizing: border-box !important; }
+      html, body { width: 210mm !important; height: 297mm !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #fff !important; color: #000 !important; }
+      body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+      #lab-print-page { position: relative; width: 210mm; height: 297mm; overflow: hidden; }
+      .lab-report-document, .lab-report-document * { background: #fff !important; box-shadow: none !important; }
+      .lab-report-document { position: absolute !important; top: 48mm !important; left: 10mm !important; width: 190mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #000 !important; transform-origin: top left !important; }
+      .lab-report-document * { border-color: transparent !important; text-decoration: none !important; }
+      .lab-report-document table, .lab-report-document thead, .lab-report-document tbody, .lab-report-document tr, .lab-report-document th, .lab-report-document td { border: 0 !important; outline: 0 !important; }
+      .lab-report-document th, .lab-report-document td { color: #000 !important; }
+      .lab-report-document .print-remarks { display: block !important; width: 100% !important; margin: 5mm 0 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; color: #000 !important; text-align: left !important; }
+      .lab-report-document .print-remarks div, .lab-report-document .print-remarks p { margin: 0 0 2mm !important; padding: 0 !important; color: #000 !important; background: #fff !important; text-align: left !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; line-height: 1.35 !important; }
+      .lab-report-document .print-generated-footer { display: none !important; }
+      .lab-report-document table { width: 100% !important; table-layout: fixed; border-collapse: collapse; page-break-inside: auto !important; break-inside: auto !important; }
+      .lab-report-document th, .lab-report-document td { padding: 2px 4px !important; font-size: 9px !important; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+      .lab-report-document tr, .lab-report-document th, .lab-report-document td { page-break-inside: avoid !important; break-inside: avoid !important; }
+      @media print { html, body { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } #lab-print-page { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } }
+    `;
+
+    const reportMarkup = html.replace(/<style[\s\S]*?<\/style>/i, "");
+    printDocument.open();
+    printDocument.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title></title></head><body><div id="lab-print-page">${reportMarkup}</div></body></html>`);
+    for (const stylesheet of Array.from(document.querySelectorAll('link[rel="stylesheet"]'))) {
+      printDocument.head.appendChild(stylesheet.cloneNode(true));
+    }
+    const copiedStylesheets = Array.from(printDocument.querySelectorAll<HTMLLinkElement>('link[rel="stylesheet"]'));
+    const pageStyle = printDocument.createElement("style");
+    pageStyle.textContent = pageCss;
+    printDocument.head.appendChild(pageStyle);
+    printDocument.close();
+
+    const cleanup = () => window.setTimeout(() => printFrame.remove(), 1000);
+    printWindow.onafterprint = cleanup;
+    window.setTimeout(() => printFrame.remove(), 60000);
+
+    const printWhenReady = async () => {
+      try {
+        await Promise.all(copiedStylesheets.map((stylesheet) => {
+          if (stylesheet.sheet) return Promise.resolve();
+          return new Promise<void>((resolve) => {
+            const timeout = window.setTimeout(resolve, 5000);
+            const finish = () => {
+              window.clearTimeout(timeout);
+              resolve();
+            };
+            stylesheet.addEventListener("load", finish, { once: true });
+            stylesheet.addEventListener("error", finish, { once: true });
+          });
+        }));
+        await Promise.all(
+          Array.from(printDocument.images).map((image) =>
+            image.complete ? Promise.resolve() : new Promise<void>((resolve) => {
+              image.onload = () => resolve();
+              image.onerror = () => resolve();
+            })
+          )
+        );
+        if ("fonts" in printDocument) await printDocument.fonts.ready;
+
+        const report = printDocument.querySelector<HTMLElement>(".lab-report-document");
+        const page = printDocument.getElementById("lab-print-page");
+        if (!report || !page) throw new Error("Lab report content is missing.");
+
+        const availableWidth = page.clientWidth - 20 * (96 / 25.4);
+        const availableHeight = 215 * (96 / 25.4);
+        const contentWidth = report.scrollWidth;
+        const contentHeight = report.scrollHeight;
+        const scale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
+        report.style.transform = `scale(${scale})`;
+
+        printWindow.focus();
+        printWindow.print();
+      } catch (error) {
+        console.error("Lab report print error:", error);
+        printFrame.remove();
+        alert("Could not prepare the report for printing. Please try again.");
+      }
+    };
+
+    window.setTimeout(printWhenReady, 250);
   };
 
   // Launch New Requisition & Prompt Result Entry
@@ -448,13 +548,20 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       currentVersion: 1,
     };
 
-    if (onAddLabOrder) {
-      onAddLabOrder(newOrder);
+    if (!onAddLabOrder) {
+      alert("Lab requisition saving is unavailable. Please refresh the portal and try again.");
+      return;
+    }
+
+    const savedOrder = await onAddLabOrder(newOrder);
+    if (!savedOrder) {
+      alert("The lab requisition could not be saved. Please check the patient details and try again.");
+      return;
     }
 
     // Close creation modal and open result entry pop-up on front!
     setIsCreateNewModalOpen(false);
-    setSelectedOrderForResult(newOrder);
+    setSelectedOrderForResult(savedOrder);
   };
 
   // Launch Result Entry directly from Test Catalog by opening Requisition Modal with patient input
@@ -1087,10 +1194,10 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <td className="py-3 px-4 text-right space-x-1.5">
                           {(order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" || order.resultsV1) ? (
                             <button
-                              onClick={() => handleGeneratePrintPreview(order)}
+                              onClick={() => openDirectPrintWindow(handleGeneratePrintHtml(order))}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
                             >
-                              <Printer className="w-3.5 h-3.5" /> View PDF
+                              <Printer className="w-3.5 h-3.5" /> Print PDF
                             </button>
                           ) : (
                             <button
@@ -1960,7 +2067,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                       <Printer className="w-4 h-4 text-blue-600" />
                       <div>
                         <div>Finalize & Print PDF Report</div>
-                        <div className="text-[10px] text-slate-400 font-normal">Opens print preview window immediately</div>
+                        <div className="text-[10px] text-slate-400 font-normal">Prints directly to the browser dialog</div>
                       </div>
                     </button>
 
@@ -1971,38 +2078,12 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                       <Sparkles className="w-4 h-4 text-amber-600" />
                       <div>
                         <div>Finalize: Both (Send + Print)</div>
-                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal">Send to Doctor AND open print preview</div>
+                        <div className="text-[10px] text-amber-700 dark:text-amber-400 font-normal">Send to Doctor and print directly</div>
                       </div>
                     </button>
                   </div>
                 )}
               </div>
-            </div>
-          </div>
-        </Modal>
-      )}
-
-      {/* PRINT / REPORT PREVIEW MODAL */}
-      {printPreviewHtml && (
-        <Modal isOpen onClose={() => setPrintPreviewHtml(null)} title="Laboratory Report PDF Preview" maxWidth="4xl">
-          <div className="space-y-4">
-            <div
-              className="p-4 max-h-[70vh] overflow-y-auto bg-slate-100 dark:bg-slate-950 rounded-xl"
-              dangerouslySetInnerHTML={{ __html: printPreviewHtml }}
-            />
-            <div className="flex justify-between items-center pt-2">
-              <button
-                onClick={() => window.print()}
-                className="px-4 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-2"
-              >
-                <Printer className="w-4 h-4" /> Print PDF Report
-              </button>
-              <button
-                onClick={() => setPrintPreviewHtml(null)}
-                className="px-4 py-2 rounded-xl bg-slate-800 text-white font-bold text-xs"
-              >
-                Close Preview
-              </button>
             </div>
           </div>
         </Modal>

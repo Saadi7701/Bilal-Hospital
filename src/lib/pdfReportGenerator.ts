@@ -238,7 +238,45 @@ export class LabPdfReportGenerator {
         : data.testCategory || "Heamatological Parameters";
 
     return `
-      <div class="max-w-4xl mx-auto bg-white p-8 border border-slate-300 shadow-xl rounded-2xl text-slate-900 font-sans text-xs">
+      <style>
+        @page { size: A4 portrait; margin: 8mm 10mm; }
+        @media print {
+          html, body {
+            margin: 0;
+            padding: 0;
+            background: #ffffff;
+            color: #0f172a;
+            -webkit-print-color-adjust: exact;
+            print-color-adjust: exact;
+          }
+          body {
+            width: 210mm;
+            min-height: 297mm;
+          }
+          .lab-report-document {
+            width: 100%;
+            max-width: none !important;
+            margin: 0;
+            padding: 0;
+            border: none !important;
+            box-shadow: none !important;
+            border-radius: 0 !important;
+          }
+          .lab-report-document table {
+            page-break-inside: avoid;
+            break-inside: avoid;
+          }
+          .lab-report-document th,
+          .lab-report-document td {
+            padding: 3px 5px;
+            font-size: 10px;
+          }
+          .lab-report-document .print-remarks {
+            background: #f8fafc !important;
+          }
+        }
+      </style>
+      <div class="lab-report-document max-w-4xl mx-auto bg-white p-8 border border-slate-300 shadow-xl rounded-2xl text-slate-900 font-sans text-xs">
         <!-- TOP DEMOGRAPHICS HEADER (Matches Official Format) -->
         <div class="flex justify-between items-start border-b border-slate-300 pb-3 mb-4 text-xs leading-relaxed">
           <div class="space-y-1">
@@ -281,7 +319,7 @@ export class LabPdfReportGenerator {
         ${
           data.remarks || data.template.interpretationNotes
             ? `
-          <div class="mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+          <div class="print-remarks mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
             <div class="font-bold text-slate-800 mb-1">Remarks / Clinical Interpretation:</div>
             <p class="text-slate-700 leading-relaxed">${data.remarks || data.template.interpretationNotes}</p>
           </div>
@@ -290,7 +328,7 @@ export class LabPdfReportGenerator {
         }
 
         <!-- FOOTER NOTIFICATION -->
-        <div class="mt-8 pt-4 border-t border-slate-300 text-[11px] text-slate-600 space-y-1">
+        <div class="print-generated-footer mt-8 pt-4 border-t border-slate-300 text-[11px] text-slate-600 space-y-1">
           <div class="font-semibold text-slate-800">Note: This is a computer generated report duly verified by Pathologist. It does not need signature.</div>
           <div class="italic text-slate-500 text-[10px]">(This is a verified computer generated report, does not require signature.)</div>
         </div>

@@ -103,7 +103,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
       const [pats, vsts, labs, us, rxs, meds, cash] = await Promise.all([
         fetchPatientsFromApi(),
         fetchVisitsFromApi(),
-        fetchLabOrdersFromApi(),
+        fetchLabOrdersFromApi("all"),
         fetchUltrasoundOrdersFromApi(),
         fetchPrescriptionsFromApi(),
         fetchMedicinesFromApi(),
@@ -214,13 +214,16 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
     loadDynamicData();
   };
 
-  const handleAddLabOrder = async (order: LabOrderRecord, transaction: CashTransactionRecord) => {
-    setLabOrders((prev) => [order, ...prev]);
+  const handleAddLabOrder = async (order: LabOrderRecord, transaction?: CashTransactionRecord): Promise<LabOrderRecord | null> => {
+    const savedOrder = await createLabOrderApi(order);
+    if (!savedOrder) return null;
+
+    setLabOrders((prev) => [savedOrder, ...prev.filter((existing) => existing.id !== savedOrder.id)]);
     if (transaction && transaction.amount > 0) {
       setCashTransactions((prev) => [transaction, ...prev]);
     }
-    await createLabOrderApi(order);
     loadDynamicData();
+    return savedOrder;
   };
 
   const handleAddUltrasoundOrder = async (order: UltrasoundOrderRecord, transaction: CashTransactionRecord) => {

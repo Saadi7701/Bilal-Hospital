@@ -75,7 +75,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       case "LABORATORY":
         return [
           { id: "lab_queue", label: "Pending Lab Orders", icon: TestTube },
-          { id: "result_entry", label: "Enter Test Results", icon: FileSpreadsheet },
           { id: "tests_list", label: "Test's List", icon: FlaskConical },
           { id: "version_history", label: "Report Version History", icon: History },
           { id: "revision_notices", label: "Consultant Revision Requests", icon: AlertTriangle },

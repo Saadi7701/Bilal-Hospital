@@ -157,7 +157,7 @@ export async function createVisitApi(visit: VisitRecord): Promise<boolean> {
   }
 }
 
-export async function fetchLabOrdersFromApi(period: string = "today"): Promise<LabOrderRecord[]> {
+export async function fetchLabOrdersFromApi(period: string = "all"): Promise<LabOrderRecord[]> {
   try {
     const res = await fetch(`/api/lab-orders?period=${period}`);
     if (!res.ok) throw new Error(`API returned status ${res.status}`);
@@ -198,7 +198,7 @@ export async function fetchLabOrdersFromApi(period: string = "today"): Promise<L
   }
 }
 
-export async function createLabOrderApi(order: LabOrderRecord): Promise<boolean> {
+export async function createLabOrderApi(order: LabOrderRecord): Promise<LabOrderRecord | null> {
   try {
     const testsArray = Array.isArray(order.tests) && order.tests.length > 0
       ? order.tests
@@ -227,12 +227,32 @@ export async function createLabOrderApi(order: LabOrderRecord): Promise<boolean>
     const data = await res.json();
     if (!res.ok) {
       console.error("[API Client Error] Lab order failed:", data.error);
-      return false;
+      return null;
     }
-    return true;
+    const savedOrder = data.labOrder;
+    if (!savedOrder) return null;
+
+    return {
+      ...order,
+      id: savedOrder._id || savedOrder.id,
+      orderNumber: savedOrder.orderNumber || order.orderNumber,
+      patientId: savedOrder.patientId || order.patientId,
+      patientName: savedOrder.patientName || order.patientName,
+      mrNumber: savedOrder.mrNumber || order.mrNumber,
+      visitId: savedOrder.visitId || "",
+      consultantId: savedOrder.consultantId || "",
+      consultantName: savedOrder.consultantName || order.consultantName,
+      testCategory: savedOrder.testCategory || order.testCategory,
+      tests: savedOrder.items?.length
+        ? savedOrder.items.map((item: any) => item.testName)
+        : order.tests,
+      totalFee: Number(savedOrder.totalFee ?? order.totalFee),
+      status: savedOrder.status || order.status,
+      requestDate: toPKTDateString(savedOrder.requestDate || order.requestDate),
+    };
   } catch (err: any) {
     console.error("[API Client Error] Lab order exception:", err.message);
-    return false;
+    return null;
   }
 }
 

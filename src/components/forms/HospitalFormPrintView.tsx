@@ -48,6 +48,22 @@ function printInWindow(html: string) {
   win.document.close();
 }
 
+export function printPrintableForm(formType: PrintableFormProps["formType"], data: any) {
+  const patient = data?.patient || {};
+  const medicines = data?.medicines || [];
+
+  let html = "";
+  if (formType === "REFERRAL") html = buildReferralHtml(data, patient, medicines);
+  if (formType === "DISCHARGE") html = buildDischargeHtml(data, patient, medicines);
+  if (formType === "ADMISSION") html = buildAdmissionHtml(data, patient);
+  if (formType === "OPERATION") html = buildOperationHtml(data, patient);
+  if (formType === "DOCTOR_NOTE") html = buildDoctorNoteHtml(data, patient);
+
+  if (html) {
+    printInWindow(html);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // HTML Builders — one per form type
 // ─────────────────────────────────────────────────────────────────────────────
@@ -237,13 +253,7 @@ export const HospitalFormPrintView: React.FC<PrintableFormProps> = ({
   const medicines = data?.medicines || [];
 
   const handlePrint = () => {
-    let html = "";
-    if (formType === "REFERRAL")    html = buildReferralHtml(data, patient, medicines);
-    if (formType === "DISCHARGE")   html = buildDischargeHtml(data, patient, medicines);
-    if (formType === "ADMISSION")   html = buildAdmissionHtml(data, patient);
-    if (formType === "OPERATION")   html = buildOperationHtml(data, patient);
-    if (formType === "DOCTOR_NOTE") html = buildDoctorNoteHtml(data, patient);
-    printInWindow(html);
+    printPrintableForm(formType, data);
   };
 
   return (

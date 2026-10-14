@@ -44,7 +44,7 @@ import {
 import { createLabOrderApi } from "../../lib/apiClient";
 import { HospitalFormsManager } from "../forms/HospitalFormsManager";
 import { PatientFileManager } from "./PatientFileManager";
-import { HospitalFormPrintView } from "../forms/HospitalFormPrintView";
+import { printPrintableForm } from "../forms/HospitalFormPrintView";
 
 const LAB_TEST_PRICES: Record<string, number> = {
   CBC: 800,
@@ -115,6 +115,46 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [selectedPatientForVisit, setSelectedPatientForVisit] = useState<PatientRecord | null>(null);
   const [printedReceipt, setPrintedReceipt] = useState<VisitRecord | null>(null);
+
+  const printReceiptDirect = (receipt: VisitRecord) => {
+    const r = receipt;
+    const win = window.open("", "_blank", "width=400,height=600,scrollbars=no");
+    if (!win) { alert("Please allow popups to print the receipt."); return; }
+
+    win.document.write(`<!DOCTYPE html>
+<html><head><meta charset="UTF-8"/><title>Receipt</title>
+<style>
+  @page { size: 80mm auto; margin: 5mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Courier New', monospace; font-size: 9.5pt; color: #000; background: #fff; margin: 0; padding: 0; width: 80mm; }
+  .center { text-align: center; }
+  .title { font-size: 13pt; font-weight: 900; }
+  .sub { font-size: 8.5pt; color: #444; }
+  .divider { border-top: 1px dashed #000; margin: 4px 0; }
+  .row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 9pt; }
+  .total { font-size: 11pt; font-weight: 900; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 3px 0; margin: 4px 0; }
+  .footer { font-size: 8pt; text-align: center; margin-top: 8px; color: #555; }
+</style></head>
+<body>
+  <div class="center">
+    <div class="title">BILAL HOSPITAL</div>
+    <div class="sub">Official Payment &amp; Admission Slip</div>
+  </div>
+  <div class="divider"></div>
+  <div class="row"><span>Slip No:</span><span><strong>${r.visitNumber}</strong></span></div>
+  <div class="row"><span>MR Number:</span><span><strong>${r.mrNumber}</strong></span></div>
+  <div class="row"><span>Patient Name:</span><span><strong>${r.patientName}</strong></span></div>
+  <div class="row"><span>Destination:</span><span>${r.destinationType || "OPD"}</span></div>
+  <div class="row"><span>Doctor / Consultant:</span><span>${r.consultantName || "-"}</span></div>
+  <div class="row"><span>Date:</span><span>${r.visitDate || new Date().toLocaleDateString()}</span></div>
+  <div class="divider"></div>
+  <div class="total row"><span>Fee Received (${r.paymentMethod || "CASH"}):</span><span>Rs. ${r.amountReceived}</span></div>
+  <div class="footer">Thank you for choosing Bilal Hospital<br/>Get well soon!</div>
+<script>window.onload=function(){setTimeout(function(){window.print();window.close();},300);};<\/script>
+</body></html>`);
+    win.document.close();
+    setPrintedReceipt(null);
+  };
 
   // New Patient Registration State
   const [newPatient, setNewPatient] = useState({
@@ -390,7 +430,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       };
 
       onAddVisit(newVisit, newLedgerTxn);
-      setPrintedReceipt(newVisit);
+      printReceiptDirect(newVisit);
       alert(`Patient ${selectedPatientForVisit.fullName} checked in! Dispatched to Doctor Queue.`);
     } else if (destinationType === "OT" || destinationType === "GYNECOLOGY") {
       const isOt = destinationType === "OT";
@@ -454,7 +494,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
       onAddAdmission(newAdmission, newLedgerTxn);
       onAddVisit(newVisit, newLedgerTxn);
-      setPrintedReceipt(newVisit);
+      printReceiptDirect(newVisit);
       alert(`Patient admitted into ${isOt ? "OT" : "Gyne Ward"}! Shown in OT & Gyne Inpatient Tracker.`);
     } else if (destinationType === "LAB") {
       // Direct Laboratory Test Request
@@ -531,7 +571,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       };
 
       createLabOrderApi(newLabOrder);
-      setPrintedReceipt(newVisit);
+      printReceiptDirect(newVisit);
       alert(`Direct Lab Order (${testNamesDisplay}) registered and dispatched to Laboratory Portal! Fee collected.`);
     } else {
       // Direct Ultrasound Scan Request
@@ -573,7 +613,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       };
 
       onAddVisit(newVisit, newLedgerTxn);
-      setPrintedReceipt(newVisit);
+      printReceiptDirect(newVisit);
       alert(`Direct Ultrasound Scan registered! Fee collected.`);
     }
 
@@ -739,7 +779,8 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
     };
 
     setDischargeModalAdmission(null);
-    setPrintedDischargeData(fullDischargeData);
+    printPrintableForm("DISCHARGE", fullDischargeData);
+    setPrintedDischargeData(null);
   };
 
   return (
@@ -1383,7 +1424,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                     </td>
                     <td className="py-3 px-4 text-right">
                       <button
-                        onClick={() => setPrintedReceipt(visit)}
+                        onClick={() => printReceiptDirect(visit)}
                         className="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100"
                       >
                         <Printer className="w-4 h-4" />
@@ -1512,7 +1553,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                         </button>
                       ) : (
                         <button
-                          onClick={() => setPrintedDischargeData({
+                          onClick={() => printPrintableForm("DISCHARGE", {
                             mrNumber: adm.mrNumber,
                             patientName: adm.patientName,
                             patient: { mrNumber: adm.mrNumber, fullName: adm.patientName, age: adm.age, gender: adm.gender, cnic: adm.cnic },
@@ -2113,115 +2154,6 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
         </Modal>
       )}
 
-      {/* MODAL 4: OFFICIAL DISCHARGE FORM PRINT — HospitalFormPrintView */}
-      {printedDischargeData && (
-        <Modal
-          isOpen={!!printedDischargeData}
-          onClose={() => setPrintedDischargeData(null)}
-          title="Official Hospital Discharge Form — Print Preview"
-          subtitle="Bilal Hospital Inpatient Discharge Record"
-          maxWidth="4xl"
-        >
-          <HospitalFormPrintView
-            formType="DISCHARGE"
-            data={printedDischargeData}
-            onClose={() => setPrintedDischargeData(null)}
-          />
-        </Modal>
-      )}
-
-      {/* PRINTED RECEIPT MODAL FOR OPD & VISITS */}
-      {printedReceipt && (
-        <Modal
-          isOpen={!!printedReceipt}
-          onClose={() => setPrintedReceipt(null)}
-          title="Patient Payment & Appointment Slip"
-          subtitle="Bilal Hospital Official Collection Slip"
-          maxWidth="md"
-        >
-          <div className="border-2 border-dashed p-6 rounded-2xl bg-slate-50 dark:bg-slate-950 space-y-4 font-mono text-xs text-slate-900 dark:text-white">
-            <div className="text-center border-b pb-3">
-              <h2 className="text-base font-black tracking-wider">BILAL HOSPITAL</h2>
-              <p className="text-[10px] text-slate-500">Official Payment & Admission Slip</p>
-            </div>
-
-            <div className="space-y-1">
-              <div className="flex justify-between">
-                <span className="text-slate-500">Slip No:</span>
-                <span className="font-bold">{printedReceipt.visitNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">MR Number:</span>
-                <span className="font-bold text-brand-600">{printedReceipt.mrNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Patient Name:</span>
-                <span className="font-bold">{printedReceipt.patientName}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Destination:</span>
-                <span className="font-bold">{printedReceipt.destinationType}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-slate-500">Doctor / Consultant:</span>
-                <span className="font-bold">{printedReceipt.consultantName}</span>
-              </div>
-            </div>
-
-            <div className="border-t border-b py-2 flex justify-between font-bold text-sm">
-              <span>Fee Received ({printedReceipt.paymentMethod}):</span>
-              <span className="text-emerald-600">Rs. {printedReceipt.amountReceived}</span>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-3 mt-4">
-            <button
-              onClick={() => {
-                // Open a clean popup so only the receipt prints — no sidebars, no multi-page
-                const r = printedReceipt!;
-                const win = window.open("", "_blank", "width=400,height=600,scrollbars=no");
-                if (!win) { alert("Please allow popups to print."); return; }
-                win.document.write(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/><title>Receipt</title>
-<style>
-  @page { size: 80mm auto; margin: 5mm; }
-  * { box-sizing: border-box; }
-  body { font-family: 'Courier New', monospace; font-size: 9.5pt; color: #000; background: #fff; margin: 0; padding: 0; width: 80mm; }
-  .center { text-align: center; }
-  .title { font-size: 13pt; font-weight: 900; }
-  .sub { font-size: 8.5pt; color: #444; }
-  .divider { border-top: 1px dashed #000; margin: 4px 0; }
-  .row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 9pt; }
-  .total { font-size: 11pt; font-weight: 900; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 3px 0; margin: 4px 0; }
-  .footer { font-size: 8pt; text-align: center; margin-top: 8px; color: #555; }
-</style></head>
-<body>
-  <div class="center">
-    <div class="title">BILAL HOSPITAL</div>
-    <div class="sub">Official Payment &amp; Admission Slip</div>
-  </div>
-  <div class="divider"></div>
-  <div class="row"><span>Slip No:</span><span><strong>${r.visitNumber}</strong></span></div>
-  <div class="row"><span>MR Number:</span><span><strong>${r.mrNumber}</strong></span></div>
-  <div class="row"><span>Patient Name:</span><span><strong>${r.patientName}</strong></span></div>
-  <div class="row"><span>Destination:</span><span>${r.destinationType || "OPD"}</span></div>
-  <div class="row"><span>Doctor / Consultant:</span><span>${r.consultantName || "-"}</span></div>
-  <div class="row"><span>Date:</span><span>${r.visitDate || new Date().toLocaleDateString()}</span></div>
-  <div class="divider"></div>
-  <div class="total row"><span>Fee Received (${r.paymentMethod || "CASH"}):</span><span>Rs. ${r.amountReceived}</span></div>
-  <div class="footer">Thank you for choosing Bilal Hospital<br/>Get well soon!</div>
-<script>window.onload=function(){setTimeout(function(){window.print();window.close();},300);};<\/script>
-</body></html>`);
-                win.document.close();
-                setPrintedReceipt(null);
-              }}
-              className="px-4 py-2 rounded-xl bg-brand-600 text-white font-bold text-xs"
-            >
-              🖨️ Print Receipt
-            </button>
-          </div>
-        </Modal>
-      )}
     </div>
   );
 };

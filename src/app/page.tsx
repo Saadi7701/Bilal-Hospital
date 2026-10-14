@@ -72,7 +72,7 @@ export default function Home() {
       const [pats, vsts, labs, us, rxs, meds, cash] = await Promise.all([
         fetchPatientsFromApi(),
         fetchVisitsFromApi(),
-        fetchLabOrdersFromApi(),
+        fetchLabOrdersFromApi("all"),
         fetchUltrasoundOrdersFromApi(),
         fetchPrescriptionsFromApi(),
         fetchMedicinesFromApi(),
@@ -203,14 +203,19 @@ export default function Home() {
     loadDynamicData();
   };
 
-  const handleAddLabOrder = async (order: LabOrderRecord, transaction: CashTransactionRecord) => {
-    setLabOrders((prev) => [order, ...prev]);
-    setCashTransactions((prev) => [transaction, ...prev]);
-    await createLabOrderApi(order);
+  const handleAddLabOrder = async (order: LabOrderRecord, transaction?: CashTransactionRecord): Promise<LabOrderRecord | null> => {
+    const savedOrder = await createLabOrderApi(order);
+    if (!savedOrder) return null;
+
+    setLabOrders((prev) => [savedOrder, ...prev.filter((existing) => existing.id !== savedOrder.id)]);
+    if (transaction && transaction.amount > 0) {
+      setCashTransactions((prev) => [transaction, ...prev]);
+    }
     if (transaction && transaction.amount > 0) {
       await createCashTransactionApi(transaction);
     }
     loadDynamicData();
+    return savedOrder;
   };
 
   const handleAddUltrasoundOrder = async (order: UltrasoundOrderRecord, transaction: CashTransactionRecord) => {
@@ -514,6 +519,8 @@ export default function Home() {
             <LabPortal
               activeTab={activeTab}
               labOrders={labOrders}
+              patients={patients}
+              onAddLabOrder={handleAddLabOrder}
               onSubmitLabResult={handleSubmitLabResult}
               onUpdateLabOrderStatus={handleUpdateLabOrderStatus}
             />

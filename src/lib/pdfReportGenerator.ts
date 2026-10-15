@@ -221,12 +221,12 @@ export class LabPdfReportGenerator {
       .map(
         (r) => `
       <tr class="${r.flag !== "NORMAL" ? "bg-rose-50 font-semibold text-rose-700" : ""}">
-        <td class="py-2.5 px-3 border-b border-slate-200 font-medium text-slate-900">${r.name}</td>
+        <td class="report-first-col py-2.5 px-3 border-b border-slate-200 font-medium text-slate-900">${r.name}</td>
         <td class="py-2.5 px-3 border-b border-slate-200 font-mono ${r.flag !== "NORMAL" ? "font-bold text-rose-600" : "font-bold text-slate-900"}">
           ${r.value || "-"} ${r.flag !== "NORMAL" ? `<span class="ml-1 text-[10px] px-1 py-0.5 rounded bg-rose-100 text-rose-800 font-bold uppercase">${r.flag}</span>` : ""}
         </td>
         <td class="py-2.5 px-3 border-b border-slate-200 font-mono text-slate-700">${r.unit || "-"}</td>
-        <td class="py-2.5 px-3 border-b border-slate-200 font-mono text-slate-700 whitespace-pre-line">${r.referenceRange || "Normal"}</td>
+        <td class="report-last-col py-2.5 px-3 border-b border-slate-200 font-mono text-slate-700 whitespace-pre-line">${r.referenceRange || "Normal"}</td>
       </tr>
     `
       )
@@ -268,8 +268,25 @@ export class LabPdfReportGenerator {
           }
           .lab-report-document th,
           .lab-report-document td {
-            padding: 3px 5px;
-            font-size: 10px;
+            padding: 2px 4px;
+            font-size: 11px;
+          }
+          .report-demographics-left {
+            margin-left: 30mm;
+          }
+          .report-demographics-right {
+            margin-right: 12mm;
+          }
+          .report-section-title,
+          .report-test-label,
+          .report-test-name {
+            padding-left: 24px;
+          }
+          .report-first-col {
+            padding-left: 24px !important;
+          }
+          .report-last-col {
+            padding-right: 24px !important;
           }
           .lab-report-document .print-remarks {
             background: #f8fafc !important;
@@ -279,12 +296,12 @@ export class LabPdfReportGenerator {
       <div class="lab-report-document max-w-4xl mx-auto bg-white p-8 border border-slate-300 shadow-xl rounded-2xl text-slate-900 font-sans text-xs">
         <!-- TOP DEMOGRAPHICS HEADER (Matches Official Format) -->
         <div class="flex justify-between items-start border-b border-slate-300 pb-3 mb-4 text-xs leading-relaxed">
-          <div class="space-y-1">
+          <div class="space-y-1 report-demographics-left">
             <div><strong class="inline-block w-24 text-slate-800">Name:</strong> <span class="font-bold text-slate-900">${data.patientName}</span></div>
             <div><strong class="inline-block w-24 text-slate-800">Age:</strong> ${data.age} Years</div>
             <div><strong class="inline-block w-24 text-slate-800">Referred By:</strong> ${data.consultantName}</div>
           </div>
-          <div class="space-y-1 text-right">
+          <div class="space-y-1 text-right report-demographics-right">
             <div><strong class="inline-block w-20 text-slate-800">Gender:</strong> ${data.gender}</div>
             <div><strong class="inline-block w-20 text-slate-800">Lab No:</strong> <span class="font-mono font-bold">${data.orderNumber}</span></div>
             <div><strong class="inline-block w-20 text-slate-800">Date:</strong> <span class="font-mono">${data.reportDate}</span></div>
@@ -293,21 +310,27 @@ export class LabPdfReportGenerator {
 
         <!-- SECTION & TEST TITLE -->
         <div class="mt-4 mb-3">
-          <div class="text-sm font-black text-slate-900 uppercase tracking-wide">${sectionTitle}</div>
-          <div class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1 border-b border-slate-200 pb-0.5">Test Name</div>
-          <div class="text-sm font-black text-slate-900 border-b-2 border-slate-900 py-1 underline font-sans">
+          <div class="report-section-title text-sm font-black text-slate-900 uppercase tracking-wide">${sectionTitle}</div>
+          <div class="report-test-label text-[11px] font-bold text-slate-500 uppercase tracking-wider mt-1 border-b border-slate-200 pb-0.5">Test Name</div>
+          <div class="report-test-name text-sm font-black text-slate-900 border-b-2 border-slate-900 py-1 underline font-sans">
             ${data.template.name || data.testName}
           </div>
         </div>
 
         <!-- PARAMETERS TABLE -->
-        <table class="w-full text-left border-collapse my-3 text-xs">
+        <table class="w-full text-left border-collapse my-2 text-xs">
+          <colgroup>
+            <col style="width: 40%" />
+            <col style="width: 14%" />
+            <col style="width: 12%" />
+            <col style="width: 34%" />
+          </colgroup>
           <thead>
             <tr class="border-b-2 border-slate-900 font-bold uppercase text-[11px] text-slate-900 bg-slate-50/80">
-              <th class="py-2.5 px-3 border-b border-slate-300">Test Name</th>
+              <th class="report-first-col py-2.5 px-3 border-b border-slate-300">Test Name</th>
               <th class="py-2.5 px-3 border-b border-slate-300">Result</th>
               <th class="py-2.5 px-3 border-b border-slate-300">Unit</th>
-              <th class="py-2.5 px-3 border-b border-slate-300">Reference Ranges</th>
+              <th class="report-last-col py-2.5 px-3 border-b border-slate-300">Reference Ranges</th>
             </tr>
           </thead>
           <tbody>

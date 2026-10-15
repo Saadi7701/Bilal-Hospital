@@ -402,15 +402,32 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
       #lab-print-page { position: relative; width: 210mm; height: 297mm; overflow: hidden; }
       .lab-report-document, .lab-report-document * { background: #fff !important; box-shadow: none !important; }
-      .lab-report-document { position: absolute !important; top: 48mm !important; left: 10mm !important; width: 190mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #000 !important; transform-origin: top left !important; }
-      .lab-report-document * { border-color: transparent !important; text-decoration: none !important; }
+      .lab-report-document { position: absolute !important; top: 64mm !important; left: 10mm !important; width: 190mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #000 !important; transform-origin: top left !important; }
+      .lab-report-document * { border-color: transparent !important; }
       .lab-report-document table, .lab-report-document thead, .lab-report-document tbody, .lab-report-document tr, .lab-report-document th, .lab-report-document td { border: 0 !important; outline: 0 !important; }
       .lab-report-document th, .lab-report-document td { color: #000 !important; }
+      .lab-report-document .flex.justify-between.items-start { display: grid !important; grid-template-columns: 1fr 1fr !important; align-items: start !important; margin: 0 0 10mm !important; padding: 0 !important; border: 0 !important; font-size: 13px !important; line-height: 1.45 !important; }
       .lab-report-document .print-remarks { display: block !important; width: 100% !important; margin: 5mm 0 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; color: #000 !important; text-align: left !important; }
       .lab-report-document .print-remarks div, .lab-report-document .print-remarks p { margin: 0 0 2mm !important; padding: 0 !important; color: #000 !important; background: #fff !important; text-align: left !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; line-height: 1.35 !important; }
       .lab-report-document .print-generated-footer { display: none !important; }
+      .lab-report-document .report-demographics-left { margin-left: 15mm !important; }
+      .lab-report-document .report-demographics-right { margin-right: 20mm !important; }
+      .lab-report-document .report-section-title,
+      .lab-report-document .report-test-label,
+      .lab-report-document .report-test-name { padding-left: 15mm !important; }
+      .lab-report-document .report-test-name,
+      .lab-report-document th { text-decoration: underline !important; }
+      .lab-report-document .report-test-name { font-size: 15px !important; }
+      .lab-report-document .report-section-title { font-size: 15px !important; }
+      .lab-report-document .report-test-label { font-size: 13px !important; }
+      .lab-report-document .mt-4.mb-3 { margin-top: 0 !important; margin-bottom: 3mm !important; }
+      .lab-report-document .report-section-title,
+      .lab-report-document .report-test-label,
+      .lab-report-document .report-test-name { line-height: 1.3 !important; }
       .lab-report-document table { width: 100% !important; table-layout: fixed; border-collapse: collapse; page-break-inside: auto !important; break-inside: auto !important; }
-      .lab-report-document th, .lab-report-document td { padding: 2px 4px !important; font-size: 9px !important; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+      .lab-report-document th, .lab-report-document td { padding: 7px 4px !important; font-size: 13px !important; line-height: 1.3 !important; vertical-align: top; overflow-wrap: anywhere; word-break: break-word; }
+      .lab-report-document th.report-first-col, .lab-report-document td.report-first-col { padding-left: 15mm !important; }
+      .lab-report-document th.report-last-col, .lab-report-document td.report-last-col { padding-right: 18mm !important; }
       .lab-report-document tr, .lab-report-document th, .lab-report-document td { page-break-inside: avoid !important; break-inside: avoid !important; }
       @media print { html, body { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } #lab-print-page { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } }
     `;

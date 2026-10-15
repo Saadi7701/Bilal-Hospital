@@ -569,7 +569,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       .lab-report-document table, .lab-report-document thead, .lab-report-document tbody, .lab-report-document tr, .lab-report-document th, .lab-report-document td { border: 0 !important; outline: 0 !important; }
       .lab-report-document th, .lab-report-document td { color: #000 !important; }
       .lab-report-document .flex.justify-between.items-start { display: grid !important; grid-template-columns: 1fr 1fr !important; align-items: start !important; margin: 0 0 10mm !important; padding: 0 !important; border: 0 !important; font-size: 13px !important; line-height: 1.45 !important; }
-      .lab-report-document .print-remarks { display: block !important; width: 100% !important; margin: 5mm 0 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; color: #000 !important; text-align: left !important; }
+      .lab-report-document .print-remarks { display: block !important; width: calc(100% - 15mm) !important; margin: 5mm 0 0 15mm !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; background: #fff !important; color: #000 !important; text-align: left !important; }
       .lab-report-document .print-remarks div, .lab-report-document .print-remarks p { margin: 0 0 2mm !important; padding: 0 !important; color: #000 !important; background: #fff !important; text-align: left !important; white-space: pre-wrap !important; overflow-wrap: anywhere !important; line-height: 1.35 !important; }
       .lab-report-document .print-generated-footer { display: none !important; }
       .lab-report-document .report-demographics-left { margin-left: 15mm !important; }

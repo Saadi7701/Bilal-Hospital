@@ -287,6 +287,8 @@ export class LabPdfReportGenerator {
             padding-right: 24px !important;
           }
           .lab-report-document .print-remarks {
+            width: calc(100% - 24px);
+            margin-left: 24px;
             background: #f8fafc !important;
           }
         }

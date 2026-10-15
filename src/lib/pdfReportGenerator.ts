@@ -303,7 +303,7 @@ export class LabPdfReportGenerator {
           </div>
           <div class="space-y-1 text-right report-demographics-right">
             <div><strong class="inline-block w-20 text-slate-800">Gender:</strong> ${data.gender}</div>
-            <div><strong class="inline-block w-20 text-slate-800">Lab No:</strong> <span class="font-mono font-bold">${data.orderNumber}</span></div>
+            <div><strong class="inline-block w-20 text-slate-800">MRN:</strong> <span class="font-mono font-bold">${data.mrNumber}</span></div>
             <div><strong class="inline-block w-20 text-slate-800">Date:</strong> <span class="font-mono">${data.reportDate}</span></div>
           </div>
         </div>

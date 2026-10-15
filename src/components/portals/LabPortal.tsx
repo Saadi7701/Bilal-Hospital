@@ -123,6 +123,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [customGender, setCustomGender] = useState("Male");
   const [customConsultant, setCustomConsultant] = useState("Dr. Self / Direct Lab Request");
   const [selectedTestCodesForNew, setSelectedTestCodesForNew] = useState<string[]>(["CBC"]);
+  const [newReqTotalAmount, setNewReqTotalAmount] = useState("800");
 
   // Auto-fetched next sequential MRN (read-only preview — actual MRN assigned on backend)
   const [nextMrn, setNextMrn] = useState<string>("Loading...");
@@ -509,6 +510,12 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       return;
     }
 
+    const totalFee = Number(newReqTotalAmount);
+    if (newReqTotalAmount.trim() === "" || !Number.isFinite(totalFee) || totalFee < 0) {
+      alert("Please enter a valid non-negative amount for the selected laboratory tests.");
+      return;
+    }
+
     let finalPatientId: string;
     let finalMrn: string;
     let finalCnic: string;
@@ -558,7 +565,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       consultantName: customConsultant || "Dr. Direct Lab Request",
       testCategory: getTemplateByCode(selectedTestCodesForNew[0])?.category || "General Pathology",
       tests: selectedTestCodesForNew,
-      totalFee: selectedTestCodesForNew.length * 800,
+      totalFee,
       priority: "NORMAL",
       status: "ORDERED",
       requestDate: new Date().toISOString().split("T")[0],
@@ -1824,6 +1831,35 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                   </div>
                 </div>
               )}
+            </div>
+
+            {/* 3. Test Amount */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-900/50">
+              <div>
+                <label htmlFor="new-lab-order-amount" className="font-black uppercase tracking-wider text-emerald-800 dark:text-emerald-300 text-[11px] block">
+                  3. Total Test Amount (PKR) *
+                </label>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+                  Enter the combined charge for the {selectedTestCodesForNew.length} selected test{selectedTestCodesForNew.length === 1 ? "" : "s"}.
+                </p>
+              </div>
+              <div>
+                <div className="flex items-center rounded-lg border-2 border-emerald-300 dark:border-emerald-800 bg-white dark:bg-slate-900 focus-within:ring-2 focus-within:ring-emerald-500">
+                  <span className="px-3 text-xs font-black text-emerald-700 dark:text-emerald-400">PKR</span>
+                  <input
+                    id="new-lab-order-amount"
+                    type="number"
+                    min="0"
+                    step="1"
+                    required
+                    value={newReqTotalAmount}
+                    onChange={(e) => setNewReqTotalAmount(e.target.value)}
+                    placeholder="Enter total test amount"
+                    className="w-full rounded-r-lg px-3 py-2 font-bold text-slate-900 dark:text-white bg-transparent outline-none"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Saved with the lab order and recorded as laboratory income when greater than zero.</p>
+              </div>
             </div>
 
             {/* Modal Actions */}

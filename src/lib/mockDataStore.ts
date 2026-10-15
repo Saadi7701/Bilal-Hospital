@@ -153,6 +153,7 @@ export interface LabOrderRecord {
     | "REVISION_REQUESTED"
     | "ACCEPTED";
   requestDate: string;
+  createdAt?: string;
   currentVersion: number;
   resultsV1?: string;
   resultsV2?: string;

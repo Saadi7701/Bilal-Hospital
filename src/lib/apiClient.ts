@@ -181,6 +181,7 @@ export async function fetchLabOrdersFromApi(period: string = "all"): Promise<Lab
         priority: l.priority || "NORMAL",
         status: l.status || "ORDERED",
         requestDate: toPKTDateString(l.requestDate),
+        createdAt: l.createdAt || l.requestDate,
         currentVersion: l.currentVersion || 1,
         resultsV1: l.resultsV1,
         resultsV2: l.resultsV2,
@@ -249,6 +250,7 @@ export async function createLabOrderApi(order: LabOrderRecord): Promise<LabOrder
       totalFee: Number(savedOrder.totalFee ?? order.totalFee),
       status: savedOrder.status || order.status,
       requestDate: toPKTDateString(savedOrder.requestDate || order.requestDate),
+      createdAt: savedOrder.createdAt || savedOrder.requestDate || order.createdAt || order.requestDate,
     };
   } catch (err: any) {
     console.error("[API Client Error] Lab order exception:", err.message);

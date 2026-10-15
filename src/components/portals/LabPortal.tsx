@@ -35,6 +35,7 @@ import {
   Filter,
   Download,
   Calendar,
+  DollarSign,
   Archive,
   Trash2,
   Pencil,
@@ -112,6 +113,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [uploadedImageBase64, setUploadedImageBase64] = useState<string | undefined>(undefined);
   const [searchMrnQuery, setSearchMrnQuery] = useState("");
   const [labExpenses, setLabExpenses] = useState<CashTransactionRecord[]>([]);
+  const [labEarningPeriod, setLabEarningPeriod] = useState<"TODAY" | "WEEK" | "ALL">("TODAY");
   const [isLoadingLabExpenses, setIsLoadingLabExpenses] = useState(false);
   const [labExpenseError, setLabExpenseError] = useState("");
   const [isLabExpenseModalOpen, setIsLabExpenseModalOpen] = useState(false);
@@ -220,6 +222,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
               priority: l.priority || "NORMAL",
               status: l.status || "ORDERED",
               requestDate: toPKTDateString(l.requestDate),
+              createdAt: l.createdAt || l.requestDate,
               currentVersion: l.currentVersion || 1,
               resultsV1: l.resultsV1,
               resultsV2: l.resultsV2,
@@ -794,6 +797,31 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const todayPKT = toPKTDateString(new Date());
   const yesterdayPKT = toPKTDateString(new Date(Date.now() - 86400000));
 
+  const todayForWeek = new Date(`${todayPKT}T12:00:00Z`);
+  const weekStartDate = new Date(todayForWeek);
+  weekStartDate.setUTCDate(todayForWeek.getUTCDate() - ((todayForWeek.getUTCDay() + 6) % 7));
+  const weekStartPKT = weekStartDate.toISOString().slice(0, 10);
+  const weekEndDate = new Date(weekStartDate);
+  weekEndDate.setUTCDate(weekStartDate.getUTCDate() + 6);
+  const weekEndPKT = weekEndDate.toISOString().slice(0, 10);
+
+  const labOrdersWithEarnings = labOrders.filter((order) => Number(order.totalFee) > 0);
+  const getLabOrderDate = (order: LabOrderRecord) => toPKTDateString(order.createdAt || order.requestDate);
+  const todayLabEarnings = labOrdersWithEarnings
+    .filter((order) => getLabOrderDate(order) === todayPKT)
+    .reduce((sum, order) => sum + Number(order.totalFee), 0);
+  const weeklyLabEarnings = labOrdersWithEarnings
+    .filter((order) => getLabOrderDate(order) >= weekStartPKT && getLabOrderDate(order) <= weekEndPKT)
+    .reduce((sum, order) => sum + Number(order.totalFee), 0);
+  const visibleLabEarnings = labOrdersWithEarnings
+    .filter((order) => {
+      const orderDate = getLabOrderDate(order);
+      if (labEarningPeriod === "TODAY") return orderDate === todayPKT;
+      if (labEarningPeriod === "WEEK") return orderDate >= weekStartPKT && orderDate <= weekEndPKT;
+      return true;
+    })
+    .sort((a, b) => new Date(b.createdAt || b.requestDate).getTime() - new Date(a.createdAt || a.requestDate).getTime());
+
   // When archive tab is active, use the full historical list; otherwise today's prop
   const sourceOrders = showArchivedTab ? allLabOrders : labOrders;
 
@@ -915,6 +943,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const isResultEntryTab = activeTab === "result_entry";
   const isTestsListTab = activeTab === "tests_list";
   const isLabExpensesTab = activeTab === "lab_expenses";
+  const isLabEarningTab = activeTab === "lab_earning";
   const isVersionHistoryTab = activeTab === "version_history";
   const isRevisionTab = activeTab === "revision_notices";
 
@@ -1217,8 +1246,142 @@ export const LabPortal: React.FC<LabPortalProps> = ({
         </div>
       )}
 
+      {isLabEarningTab && (
+        <div className="space-y-5">
+          <div className="rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5 shadow-sm dark:border-emerald-950 dark:from-emerald-950/30 dark:to-slate-900 sm:p-6">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
+                  <DollarSign className="h-4 w-4" />
+                  <span>Laboratory Finance</span>
+                </div>
+                <h2 className="text-xl font-black text-slate-900 dark:text-white sm:text-2xl">Lab Earning</h2>
+                <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Earnings are calculated from the recorded fee on each laboratory test order.</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  ["TODAY", "Today"],
+                  ["WEEK", "This Week"],
+                  ["ALL", "All Records"],
+                ] as const).map(([period, label]) => (
+                  <button
+                    key={period}
+                    type="button"
+                    onClick={() => setLabEarningPeriod(period)}
+                    className={`rounded-xl px-3.5 py-2 text-xs font-bold transition-colors ${labEarningPeriod === period ? "bg-emerald-600 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-emerald-50 dark:bg-slate-800 dark:text-slate-300 dark:hover:bg-slate-700"}`}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="rounded-2xl border border-emerald-200 bg-white p-4 dark:border-emerald-950 dark:bg-slate-900">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Today&apos;s Test Earnings</div>
+              <div className="mt-1 font-mono text-2xl font-black text-emerald-600 dark:text-emerald-400">Rs. {todayLabEarnings.toLocaleString()}</div>
+              <div className="mt-1 text-[10px] text-slate-400">{formatPKTDateAndDay(todayPKT)}</div>
+            </div>
+            <div className="rounded-2xl border border-blue-200 bg-white p-4 dark:border-blue-950 dark:bg-slate-900">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">This Week&apos;s Test Earnings</div>
+              <div className="mt-1 font-mono text-2xl font-black text-blue-600 dark:text-blue-400">Rs. {weeklyLabEarnings.toLocaleString()}</div>
+              <div className="mt-1 text-[10px] text-slate-400">{formatPKTDateAndDay(weekStartPKT)} – {formatPKTDateAndDay(weekEndPKT)}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Orders in View</div>
+              <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{visibleLabEarnings.length}</div>
+              <div className="mt-1 text-[10px] text-slate-400">{labEarningPeriod === "TODAY" ? "Today" : labEarningPeriod === "WEEK" ? "Current week" : "All recorded orders"}</div>
+            </div>
+          </div>
+
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="flex flex-col gap-1 border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:flex-row sm:items-end sm:justify-between sm:px-6">
+              <div>
+                <h3 className="font-black text-slate-900 dark:text-white">Test Earnings Ledger</h3>
+                <p className="mt-1 text-[11px] text-slate-500">Order date and time, patient, requested tests, status, and fee recorded.</p>
+              </div>
+              <div className="text-xs font-bold text-emerald-700 dark:text-emerald-400">
+                Period total: Rs. {visibleLabEarnings.reduce((sum, order) => sum + Number(order.totalFee), 0).toLocaleString()}
+              </div>
+            </div>
+
+            {visibleLabEarnings.length === 0 ? (
+              <div className="px-4 py-12 text-center text-sm text-slate-500">No paid laboratory test orders in this period.</div>
+            ) : (
+              <>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[900px] text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        <th className="px-4 py-3">Date & Time</th>
+                        <th className="px-4 py-3">Order</th>
+                        <th className="px-4 py-3">Patient / MRN</th>
+                        <th className="px-4 py-3">Test(s)</th>
+                        <th className="px-4 py-3">Consultant</th>
+                        <th className="px-4 py-3">Status</th>
+                        <th className="px-4 py-3 text-right">Earned</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {visibleLabEarnings.map((order) => {
+                        const timestamp = order.createdAt || order.requestDate;
+                        const timeLabel = order.createdAt
+                          ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))
+                          : "—";
+                        return (
+                          <tr key={order.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                            <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700 dark:text-slate-200">
+                              {formatPKTDateAndDay(timestamp)}
+                              <span className="mt-0.5 block text-[10px] text-slate-400">{timeLabel}</span>
+                            </td>
+                            <td className="px-4 py-3 font-mono font-bold text-slate-700 dark:text-slate-200">{order.orderNumber}</td>
+                            <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100">
+                              {order.patientName}<span className="mt-0.5 block font-mono text-[10px] font-normal text-amber-600">{order.mrNumber}</span>
+                            </td>
+                            <td className="max-w-sm whitespace-normal break-words px-4 py-3 text-slate-700 dark:text-slate-200">{order.tests.join(", ")}</td>
+                            <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{order.consultantName}</td>
+                            <td className="px-4 py-3"><Badge variant={order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" ? "success" : "warning"}>{order.status}</Badge></td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-black text-emerald-600 dark:text-emerald-400">Rs. {Number(order.totalFee).toLocaleString()}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="space-y-3 p-3 md:hidden">
+                  {visibleLabEarnings.map((order) => {
+                    const timestamp = order.createdAt || order.requestDate;
+                    const timeLabel = order.createdAt
+                      ? new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Karachi", hour: "2-digit", minute: "2-digit" }).format(new Date(order.createdAt))
+                      : "—";
+                    return (
+                      <article key={order.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="break-words text-sm font-bold text-slate-900 dark:text-white">{order.patientName}</div>
+                            <div className="mt-0.5 font-mono text-[10px] text-amber-600">{order.mrNumber} · {order.orderNumber}</div>
+                          </div>
+                          <div className="shrink-0 text-right font-mono text-sm font-black text-emerald-600 dark:text-emerald-400">Rs. {Number(order.totalFee).toLocaleString()}</div>
+                        </div>
+                        <div className="mt-2 break-words text-xs text-slate-600 dark:text-slate-300">{order.tests.join(", ")}</div>
+                        <div className="mt-3 flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[10px] text-slate-500 dark:border-slate-700">
+                          <span>{formatPKTDateAndDay(timestamp)} · {timeLabel}</span>
+                          <span>{order.consultantName}</span>
+                        </div>
+                        <div className="mt-2"><Badge variant={order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" ? "success" : "warning"}>{order.status}</Badge></div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* TOP HEADER BANNER WITH "+ CREATE NEW" BUTTON */}
-      {!isLabExpensesTab && <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 via-amber-950 to-slate-900 p-6 rounded-2xl border border-amber-800/40 shadow-xl text-white">
+      {!isLabExpensesTab && !isLabEarningTab && <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 via-amber-950 to-slate-900 p-6 rounded-2xl border border-amber-800/40 shadow-xl text-white">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
             <TestTube className="w-4 h-4" />
@@ -1257,7 +1420,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       </div>}
 
       {/* METRIC CARDS */}
-      {!isLabExpensesTab && <>
+      {!isLabExpensesTab && !isLabEarningTab && <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Requisitions"

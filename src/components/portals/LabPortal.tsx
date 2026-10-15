@@ -3,6 +3,7 @@ import JSZip from "jszip";
 import {
   TestTube,
   FileSpreadsheet,
+  Receipt,
   History,
   AlertTriangle,
   CheckCircle2,
@@ -43,7 +44,7 @@ import {
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
 import { Modal } from "../ui/Modal";
-import { LabOrderRecord, PatientRecord } from "../../lib/mockDataStore";
+import { CashTransactionRecord, LabOrderRecord, PatientRecord } from "../../lib/mockDataStore";
 import {
   getTemplateByCode,
   DEFAULT_LAB_TEMPLATES,
@@ -64,7 +65,7 @@ import {
 } from "../../lib/labTemplateRegistry";
 import { labTemplateEngine } from "../../lib/labTemplateEngine";
 import { labPdfReportGenerator } from "../../lib/pdfReportGenerator";
-import { toPKTDateString } from "../../lib/dateUtils";
+import { formatPKTDateAndDay, toPKTDateString } from "../../lib/dateUtils";
 import { createPatientApi } from "../../lib/apiClient";
 
 interface LabPortalProps {
@@ -110,6 +111,15 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [uploadedFileName, setUploadedFileName] = useState("");
   const [uploadedImageBase64, setUploadedImageBase64] = useState<string | undefined>(undefined);
   const [searchMrnQuery, setSearchMrnQuery] = useState("");
+  const [labExpenses, setLabExpenses] = useState<CashTransactionRecord[]>([]);
+  const [isLoadingLabExpenses, setIsLoadingLabExpenses] = useState(false);
+  const [labExpenseError, setLabExpenseError] = useState("");
+  const [isLabExpenseModalOpen, setIsLabExpenseModalOpen] = useState(false);
+  const [labExpenseCategory, setLabExpenseCategory] = useState("Lab Supplies & Consumables");
+  const [labExpenseAmount, setLabExpenseAmount] = useState("");
+  const [labExpenseDescription, setLabExpenseDescription] = useState("");
+  const [labExpensePaymentMethod, setLabExpensePaymentMethod] = useState("CASH");
+  const [isSavingLabExpense, setIsSavingLabExpense] = useState(false);
 
   // Action Dropdown State for Result Finalization
   const [isActionDropdownOpen, setIsActionDropdownOpen] = useState(false);
@@ -238,6 +248,56 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       .finally(() => setIsFetchingMrn(false));
   }, [isCreateNewModalOpen]);
 
+  useEffect(() => {
+    if (activeTab !== "lab_expenses") return;
+    let isCurrent = true;
+    setIsLoadingLabExpenses(true);
+    setLabExpenseError("");
+
+    fetch("/api/cash?period=all")
+      .then(async (response) => {
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Could not load laboratory expenses.");
+        return data;
+      })
+      .then((data) => {
+        if (!isCurrent) return;
+        const expenses = (Array.isArray(data.transactions) ? data.transactions : [])
+          .filter((transaction: any) =>
+            transaction.transactionType === "EXPENSE" &&
+            String(transaction.department || "").toLowerCase() === "laboratory"
+          )
+          .map((transaction: any): CashTransactionRecord => {
+            const transactionDate = transaction.transactionDate || transaction.date;
+            const parsedDate = transactionDate ? new Date(transactionDate) : new Date();
+            return {
+              id: transaction.id || transaction._id || transaction.transactionNumber,
+              transactionNumber: transaction.transactionNumber || "—",
+              transactionType: "EXPENSE",
+              category: transaction.category || "Laboratory Expense",
+              department: transaction.department || "Laboratory",
+              amount: Number(transaction.amount) || 0,
+              paymentMethod: transaction.paymentMethod || "CASH",
+              description: transaction.description || "—",
+              date: toPKTDateString(parsedDate),
+              time: Number.isNaN(parsedDate.getTime()) ? "" : parsedDate.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              createdBy: transaction.createdBy || transaction.enteredBy || "Lab Staff",
+            };
+          });
+        setLabExpenses(expenses);
+      })
+      .catch((error) => {
+        if (isCurrent) setLabExpenseError(error.message || "Could not load laboratory expenses.");
+      })
+      .finally(() => {
+        if (isCurrent) setIsLoadingLabExpenses(false);
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [activeTab]);
+
   // Close dropdown when clicking outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -283,6 +343,58 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
   const handleInputChange = (paramId: string, val: string) => {
     setFormResults((prev) => ({ ...prev, [paramId]: val }));
+  };
+
+  const handleLabExpenseSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const amount = Number(labExpenseAmount);
+    if (!Number.isFinite(amount) || amount <= 0 || !labExpenseDescription.trim()) {
+      setLabExpenseError("Enter a valid amount and expense description.");
+      return;
+    }
+
+    setIsSavingLabExpense(true);
+    setLabExpenseError("");
+    try {
+      const response = await fetch("/api/cash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transactionNumber: `TXN-LAB-EXP-${Date.now()}`,
+          transactionType: "EXPENSE",
+          category: labExpenseCategory,
+          department: "Laboratory",
+          amount,
+          paymentMethod: labExpensePaymentMethod,
+          description: labExpenseDescription.trim(),
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not save the lab expense.");
+
+      const saved = data.transaction || {};
+      const now = new Date();
+      setLabExpenses((current) => [{
+        id: saved.id || saved._id || saved.transactionNumber,
+        transactionNumber: saved.transactionNumber || `TXN-LAB-EXP-${Date.now()}`,
+        transactionType: "EXPENSE",
+        category: saved.category || labExpenseCategory,
+        department: saved.department || "Laboratory",
+        amount: Number(saved.amount ?? amount),
+        paymentMethod: saved.paymentMethod || labExpensePaymentMethod,
+        description: saved.description || labExpenseDescription.trim(),
+        date: toPKTDateString(saved.transactionDate || now),
+        time: now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        createdBy: "Lab Staff",
+      }, ...current]);
+      setLabExpenseAmount("");
+      setLabExpenseDescription("");
+      setIsLabExpenseModalOpen(false);
+    } catch (error: any) {
+      setLabExpenseError(error.message || "Could not save the lab expense.");
+    } finally {
+      setIsSavingLabExpense(false);
+    }
   };
 
   // Master Finalization Handler (supports "DOCTOR", "PRINT", "BOTH")
@@ -787,6 +899,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const isQueueTab = activeTab === "lab_queue" || activeTab === "orders" || activeTab === "overview";
   const isResultEntryTab = activeTab === "result_entry";
   const isTestsListTab = activeTab === "tests_list";
+  const isLabExpensesTab = activeTab === "lab_expenses";
   const isVersionHistoryTab = activeTab === "version_history";
   const isRevisionTab = activeTab === "revision_notices";
 
@@ -980,8 +1093,117 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
   return (
     <div className="space-y-6">
+      {isLabExpensesTab && (
+        <div className="space-y-5">
+          <div className="flex flex-col gap-4 rounded-2xl border border-rose-200 bg-gradient-to-r from-rose-50 to-white p-5 shadow-sm dark:border-rose-950 dark:from-rose-950/30 dark:to-slate-900 sm:flex-row sm:items-center sm:justify-between sm:p-6">
+            <div>
+              <div className="mb-1 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">
+                <Receipt className="h-4 w-4" />
+                <span>Laboratory Finance</span>
+              </div>
+              <h2 className="text-xl font-black text-slate-900 dark:text-white sm:text-2xl">Lab Expenses</h2>
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">Record and review laboratory purchases and operating costs.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                setLabExpenseError("");
+                setIsLabExpenseModalOpen(true);
+              }}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-rose-600 px-4 py-2.5 text-xs font-bold text-white shadow-md transition-colors hover:bg-rose-500 sm:w-auto"
+            >
+              <Plus className="h-4 w-4" />
+              Add Lab Expense
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-rose-200 bg-white p-4 dark:border-rose-950 dark:bg-slate-900">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Recorded Expenses</div>
+              <div className="mt-1 text-2xl font-black text-slate-900 dark:text-white">{labExpenses.length}</div>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-white p-4 dark:border-rose-950 dark:bg-slate-900">
+              <div className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Total Lab Cash Out</div>
+              <div className="mt-1 font-mono text-2xl font-black text-rose-600 dark:text-rose-400">
+                Rs. {labExpenses.reduce((sum, expense) => sum + (Number(expense.amount) || 0), 0).toLocaleString()}
+              </div>
+            </div>
+          </div>
+
+          {labExpenseError && (
+            <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+              {labExpenseError}
+            </div>
+          )}
+
+          <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900">
+            <div className="border-b border-slate-100 px-4 py-4 dark:border-slate-800 sm:px-6">
+              <h3 className="font-black text-slate-900 dark:text-white">Laboratory Expense Ledger</h3>
+              <p className="mt-1 text-[11px] text-slate-500">Expenses are also recorded in the hospital central cash ledger.</p>
+            </div>
+
+            {isLoadingLabExpenses ? (
+              <div className="px-4 py-12 text-center text-sm text-slate-500">Loading laboratory expenses…</div>
+            ) : labExpenses.length === 0 ? (
+              <div className="px-4 py-12 text-center text-sm text-slate-500">No laboratory expenses have been recorded yet.</div>
+            ) : (
+              <>
+                <div className="hidden overflow-x-auto md:block">
+                  <table className="w-full min-w-[800px] text-left text-xs">
+                    <thead>
+                      <tr className="bg-slate-50 text-[10px] font-bold uppercase tracking-wide text-slate-500 dark:bg-slate-800 dark:text-slate-300">
+                        <th className="px-4 py-3">Date & Day</th>
+                        <th className="px-4 py-3">Transaction</th>
+                        <th className="px-4 py-3">Expense Category</th>
+                        <th className="px-4 py-3">Description</th>
+                        <th className="px-4 py-3">Payment</th>
+                        <th className="px-4 py-3 text-right">Amount</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {labExpenses.map((expense) => (
+                        <tr key={expense.id} className="align-top hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                          <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-700 dark:text-slate-200">
+                            {formatPKTDateAndDay(expense.date)}
+                            {expense.time && <span className="mt-0.5 block text-[10px] text-slate-400">{expense.time}</span>}
+                          </td>
+                          <td className="px-4 py-3 font-mono font-bold text-slate-700 dark:text-slate-200">{expense.transactionNumber}</td>
+                          <td className="px-4 py-3 font-semibold text-slate-800 dark:text-slate-100">{expense.category}</td>
+                          <td className="max-w-sm whitespace-normal break-words px-4 py-3 text-slate-600 dark:text-slate-300">{expense.description}</td>
+                          <td className="px-4 py-3 text-slate-600 dark:text-slate-300">{expense.paymentMethod}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right font-mono font-black text-rose-600 dark:text-rose-400">Rs. {Number(expense.amount).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="space-y-3 p-3 md:hidden">
+                  {labExpenses.map((expense) => (
+                    <article key={expense.id} className="rounded-xl border border-slate-200 p-4 dark:border-slate-700">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h4 className="break-words text-sm font-bold text-slate-900 dark:text-white">{expense.category}</h4>
+                          <p className="mt-1 break-words text-xs text-slate-600 dark:text-slate-300">{expense.description}</p>
+                        </div>
+                        <div className="shrink-0 text-right font-mono text-sm font-black text-rose-600 dark:text-rose-400">
+                          Rs. {Number(expense.amount).toLocaleString()}
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap justify-between gap-x-3 gap-y-1 border-t border-slate-100 pt-2 text-[10px] text-slate-500 dark:border-slate-700">
+                        <span>{formatPKTDateAndDay(expense.date)}{expense.time ? ` · ${expense.time}` : ""}</span>
+                        <span>{expense.transactionNumber} · {expense.paymentMethod}</span>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+      )}
+
       {/* TOP HEADER BANNER WITH "+ CREATE NEW" BUTTON */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 via-amber-950 to-slate-900 p-6 rounded-2xl border border-amber-800/40 shadow-xl text-white">
+      {!isLabExpensesTab && <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-slate-950 via-amber-950 to-slate-900 p-6 rounded-2xl border border-amber-800/40 shadow-xl text-white">
         <div className="space-y-1">
           <div className="flex items-center gap-2 text-amber-400 text-xs font-bold uppercase tracking-wider">
             <TestTube className="w-4 h-4" />
@@ -1024,9 +1246,10 @@ export const LabPortal: React.FC<LabPortalProps> = ({
             />
           </div>
         </div>
-      </div>
+      </div>}
 
       {/* METRIC CARDS */}
+      {!isLabExpensesTab && <>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           title="Total Requisitions"
@@ -1057,6 +1280,100 @@ export const LabPortal: React.FC<LabPortalProps> = ({
           iconBg="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
         />
       </div>
+      </>}
+
+      {isLabExpenseModalOpen && (
+        <Modal
+          isOpen
+          onClose={() => !isSavingLabExpense && setIsLabExpenseModalOpen(false)}
+          title="Add Laboratory Expense"
+          subtitle="Record this expense in the central cash ledger under Laboratory."
+          maxWidth="md"
+        >
+          <form onSubmit={handleLabExpenseSubmit} className="space-y-4 text-xs">
+            {labExpenseError && (
+              <div role="alert" className="rounded-xl border border-rose-300 bg-rose-50 px-3 py-2.5 font-semibold text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">
+                {labExpenseError}
+              </div>
+            )}
+            <div>
+              <label htmlFor="lab-expense-category" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Expense Category *</label>
+              <select
+                id="lab-expense-category"
+                required
+                value={labExpenseCategory}
+                onChange={(event) => setLabExpenseCategory(event.target.value)}
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              >
+                <option>Lab Supplies & Consumables</option>
+                <option>Lab Equipment & Reagents</option>
+                <option>Equipment Maintenance</option>
+                <option>Staff Training</option>
+                <option>Other Laboratory Expense</option>
+              </select>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <label htmlFor="lab-expense-amount" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Amount (Rs.) *</label>
+                <input
+                  id="lab-expense-amount"
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  required
+                  value={labExpenseAmount}
+                  onChange={(event) => setLabExpenseAmount(event.target.value)}
+                  placeholder="Enter amount"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-mono font-bold text-rose-600 dark:border-slate-700 dark:bg-slate-800"
+                />
+              </div>
+              <div>
+                <label htmlFor="lab-expense-payment" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Payment Method *</label>
+                <select
+                  id="lab-expense-payment"
+                  value={labExpensePaymentMethod}
+                  onChange={(event) => setLabExpensePaymentMethod(event.target.value)}
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 font-semibold dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+                >
+                  <option value="CASH">Cash</option>
+                  <option value="CARD">Card</option>
+                  <option value="BANK_TRANSFER">Bank Transfer</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label htmlFor="lab-expense-description" className="mb-1 block font-bold text-slate-700 dark:text-slate-300">Description / Voucher Note *</label>
+              <textarea
+                id="lab-expense-description"
+                rows={3}
+                required
+                value={labExpenseDescription}
+                onChange={(event) => setLabExpenseDescription(event.target.value)}
+                placeholder="Describe what the expense was for"
+                className="w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-800 dark:text-white"
+              />
+            </div>
+            <div className="flex flex-col-reverse gap-2 border-t border-slate-100 pt-3 dark:border-slate-800 sm:flex-row sm:justify-end">
+              <button
+                type="button"
+                disabled={isSavingLabExpense}
+                onClick={() => setIsLabExpenseModalOpen(false)}
+                className="rounded-xl border border-slate-200 px-4 py-2 font-semibold text-slate-600 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSavingLabExpense}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-rose-600 px-5 py-2 font-bold text-white hover:bg-rose-500 disabled:cursor-wait disabled:opacity-60"
+              >
+                <Receipt className="h-4 w-4" />
+                {isSavingLabExpense ? "Saving…" : "Save Lab Expense"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
 
       {/* VIEW 1: QUEUE & PENDING ORDERS */}
       {isQueueTab && (

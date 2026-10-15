@@ -76,6 +76,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         return [
           { id: "lab_queue", label: "Pending Lab Orders", icon: TestTube },
           { id: "tests_list", label: "Test's List", icon: FlaskConical },
+          { id: "lab_expenses", label: "Lab Expense", icon: Receipt },
           { id: "version_history", label: "Report Version History", icon: History },
           { id: "revision_notices", label: "Consultant Revision Requests", icon: AlertTriangle },
         ];

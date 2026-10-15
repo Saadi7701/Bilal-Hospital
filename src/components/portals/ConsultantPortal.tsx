@@ -88,7 +88,11 @@ const LabReportInlineViewer: React.FC<{
   let parsedResults: Record<string, string> = {};
   const rawResults = order.resultsV2 || order.resultsV1 || '';
   try {
-    parsedResults = rawResults ? JSON.parse(rawResults) : {};
+    const parsed: any = rawResults ? JSON.parse(rawResults) : {};
+    const perTest = parsed.__labTests?.[tmpl.code] || parsed.__labTests?.[testCode];
+    parsedResults = perTest?.results || (Array.isArray(parsed)
+      ? Object.fromEntries(parsed.map((item: any) => [item.parameterId, item.value]))
+      : parsed);
   } catch {
     parsedResults = {};
   }
@@ -1325,7 +1329,13 @@ export const ConsultantPortal: React.FC<ConsultantPortalProps> = ({
                   const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
                   let parsedResults: Record<string, string> = {};
                   const rawResults = lab.resultsV2 || lab.resultsV1 || '';
-                  try { parsedResults = rawResults ? JSON.parse(rawResults) : {}; } catch { parsedResults = {}; }
+                  try {
+                    const parsed: any = rawResults ? JSON.parse(rawResults) : {};
+                    const perTest = parsed.__labTests?.[tmpl.code] || parsed.__labTests?.[testCode];
+                    parsedResults = perTest?.results || (Array.isArray(parsed)
+                      ? Object.fromEntries(parsed.map((item: any) => [item.parameterId, item.value]))
+                      : parsed);
+                  } catch { parsedResults = {}; }
                   const evaluated = labTemplateEngine.evaluateAllResults(tmpl, parsedResults);
                   const abnormals = evaluated.filter((r) => r.flag !== 'NORMAL');
                   const criticals = evaluated.filter((r) => r.flag === 'CRITICAL');

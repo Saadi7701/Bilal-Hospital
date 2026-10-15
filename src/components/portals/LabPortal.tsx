@@ -96,6 +96,9 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   // Result Entry Pop-up Modal State
   const [selectedOrderForResult, setSelectedOrderForResult] = useState<LabOrderRecord | null>(null);
   const [activeTemplate, setActiveTemplate] = useState<LabTemplateDef | null>(null);
+  const [activeTestIndex, setActiveTestIndex] = useState(0);
+  const [draftResultsByTest, setDraftResultsByTest] = useState<Record<string, Record<string, string>>>({});
+  const [draftRemarksByTest, setDraftRemarksByTest] = useState<Record<string, string>>({});
   const [viewingOrderModal, setViewingOrderModal] = useState<LabOrderRecord | null>(null);
 
   // Patient Identity Verification State
@@ -246,30 +249,37 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // When an order is selected for result entry, resolve matching template
+  // Reset test progression and identity confirmation when a different order is opened.
+  useEffect(() => {
+    setActiveTestIndex(0);
+    setDraftResultsByTest({});
+    setDraftRemarksByTest({});
+    setIdentityConfirmed(false);
+  }, [selectedOrderForResult?.id]);
+
+  // Resolve the selected test form while keeping the same patient/order context.
   useEffect(() => {
     if (selectedOrderForResult) {
-      setIdentityConfirmed(false);
       setIsActionDropdownOpen(false);
       const testCode =
-        selectedOrderForResult.tests && selectedOrderForResult.tests[0]
-          ? selectedOrderForResult.tests[0]
+        selectedOrderForResult.tests && selectedOrderForResult.tests[activeTestIndex]
+          ? selectedOrderForResult.tests[activeTestIndex]
           : "CBC";
       const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
       setActiveTemplate(tmpl);
 
-      // Initialize default parameter values
-      const initial: Record<string, string> = {};
+      // Restore this test's draft, or initialize its own defaults.
+      const initial: Record<string, string> = { ...(draftResultsByTest[tmpl.code] || {}) };
       tmpl.parameters.forEach((p) => {
-        if (p.defaultValue) initial[p.parameterId] = p.defaultValue;
+        if (initial[p.parameterId] === undefined && p.defaultValue) initial[p.parameterId] = p.defaultValue;
       });
       setFormResults(initial);
-      setTechnicianNotes(tmpl.defaultRemarks || "");
+      setTechnicianNotes(draftRemarksByTest[tmpl.code] ?? tmpl.defaultRemarks ?? "");
       setUploadedFileName(`${selectedOrderForResult.mrNumber}_${tmpl.code}_REPORT.pdf`);
     } else {
       setActiveTemplate(null);
     }
-  }, [selectedOrderForResult]);
+  }, [selectedOrderForResult, activeTestIndex, draftResultsByTest, draftRemarksByTest]);
 
   const handleInputChange = (paramId: string, val: string) => {
     setFormResults((prev) => ({ ...prev, [paramId]: val }));
@@ -285,6 +295,15 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     }
 
     const isV2 = selectedOrderForResult.status === "REVISION_REQUESTED";
+    const currentTestCode = activeTemplate.code;
+    const testResults = {
+      ...draftResultsByTest,
+      [currentTestCode]: formResults,
+    };
+    const testRemarks = {
+      ...draftRemarksByTest,
+      [currentTestCode]: technicianNotes,
+    };
 
     // Target status depending on action selection
     let targetStatus: LabOrderRecord["status"] = "ACCEPTED";
@@ -298,7 +317,14 @@ export const LabPortal: React.FC<LabPortalProps> = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           labOrderId: selectedOrderForResult.id,
+          testResults: Object.fromEntries(
+            Object.entries(testResults).map(([code, results]) => [code, {
+              results,
+              remarks: testRemarks[code] || activeTemplate.defaultRemarks || "",
+            }])
+          ),
           resultsJson: JSON.stringify(formResults),
+          testCode: currentTestCode,
           remarks: technicianNotes,
           technicianName: "Lab Technologist",
           isVersion2: isV2,
@@ -319,9 +345,16 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     }
 
     // Call frontend handler to update master state
+    const combinedTestResults = Object.fromEntries(
+      Object.entries(testResults).map(([code, results]) => [code, {
+        results,
+        remarks: testRemarks[code] || "",
+      }])
+    );
+    const combinedResultsJson = JSON.stringify({ __labTests: combinedTestResults });
     onSubmitLabResult(
       selectedOrderForResult.id,
-      JSON.stringify(formResults),
+      combinedResultsJson,
       uploadedFileName,
       isV2,
       uploadedImageBase64
@@ -335,10 +368,14 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     if (actionType === "PRINT" || actionType === "BOTH") {
       const finalOrderForPrint = {
         ...selectedOrderForResult,
-        resultsV1: JSON.stringify(formResults),
+        resultsV1: combinedResultsJson,
         status: targetStatus,
       };
-      openDirectPrintWindow(handleGeneratePrintHtml(finalOrderForPrint));
+      const reportSheets = selectedOrderForResult.tests.map((test) => {
+        const template = getTemplateByCode(test) || DEFAULT_LAB_TEMPLATES[0];
+        return handleGeneratePrintHtml(finalOrderForPrint, template.code, testResults[template.code] || {});
+      });
+      openDirectPrintWindow(reportSheets);
     }
 
     setIsActionDropdownOpen(false);
@@ -347,15 +384,22 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   };
 
   // Build print-ready report HTML for a direct browser print popup
-  const handleGeneratePrintHtml = (order: LabOrderRecord): string => {
-    const testCode = order.tests && order.tests[0] ? order.tests[0] : "CBC";
+  const handleGeneratePrintHtml = (
+    order: LabOrderRecord,
+    requestedTestCode?: string,
+    enteredResults?: Record<string, string>
+  ): string => {
+    const testCode = requestedTestCode || (order.tests && order.tests[0] ? order.tests[0] : "CBC");
     const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
 
-    let resultsObj: Record<string, string> = {};
-    try {
-      resultsObj = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
-    } catch {
-      resultsObj = { notes: order.resultsV1 || "" };
+    let resultsObj: Record<string, string> = enteredResults || {};
+    if (!enteredResults) {
+      try {
+        const parsed = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
+        resultsObj = parsed.__labTests?.[tmpl.code]?.results || parsed.__labTests?.[testCode]?.results || parsed.__labTests?.[tmpl.code] || parsed.__labTests?.[testCode] || parsed;
+      } catch {
+        resultsObj = { notes: order.resultsV1 || "" };
+      }
     }
 
     const evaluated = labTemplateEngine.evaluateAllResults(tmpl, resultsObj);
@@ -381,7 +425,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     });
   };
 
-  const openDirectPrintWindow = (html: string) => {
+  const openDirectPrintWindow = (html: string | string[]) => {
     const printFrame = document.createElement("iframe");
     printFrame.setAttribute("aria-hidden", "true");
     printFrame.title = "Lab report print frame";
@@ -401,7 +445,9 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       *, *::before, *::after { box-sizing: border-box !important; }
       html, body { width: 210mm !important; height: 297mm !important; min-height: 0 !important; margin: 0 !important; padding: 0 !important; overflow: hidden !important; background: #fff !important; color: #000 !important; }
       body { font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-      #lab-print-page { position: relative; width: 210mm; height: 297mm; overflow: hidden; }
+      #lab-print-document { width: 210mm; }
+      .lab-print-sheet { position: relative; width: 210mm; height: 297mm; overflow: hidden; page-break-after: always; break-after: page; }
+      .lab-print-sheet:last-child { page-break-after: auto; break-after: auto; }
       .lab-report-document, .lab-report-document * { background: #fff !important; box-shadow: none !important; }
       .lab-report-document { position: absolute !important; top: 64mm !important; left: 10mm !important; width: 190mm !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; border-radius: 0 !important; color: #000 !important; transform-origin: top left !important; }
       .lab-report-document * { border-color: transparent !important; }
@@ -430,12 +476,15 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       .lab-report-document th.report-first-col, .lab-report-document td.report-first-col { padding-left: 15mm !important; }
       .lab-report-document th.report-last-col, .lab-report-document td.report-last-col { padding-right: 18mm !important; }
       .lab-report-document tr, .lab-report-document th, .lab-report-document td { page-break-inside: avoid !important; break-inside: avoid !important; }
-      @media print { html, body { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } #lab-print-page { width: 210mm !important; height: 297mm !important; overflow: hidden !important; } }
+      @media print { html, body { width: 210mm !important; height: auto !important; overflow: visible !important; } #lab-print-document { width: 210mm !important; } .lab-print-sheet { width: 210mm !important; height: 297mm !important; overflow: hidden !important; page-break-after: always !important; break-after: page !important; } .lab-print-sheet:last-child { page-break-after: auto !important; break-after: auto !important; } }
     `;
 
-    const reportMarkup = html.replace(/<style[\s\S]*?<\/style>/i, "");
+    const reports = Array.isArray(html) ? html : [html];
+    const reportMarkup = reports
+      .map((report) => `<section class="lab-print-sheet">${report.replace(/<style[\s\S]*?<\/style>/i, "")}</section>`)
+      .join("");
     printDocument.open();
-    printDocument.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title></title></head><body><div id="lab-print-page">${reportMarkup}</div></body></html>`);
+    printDocument.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title></title></head><body><main id="lab-print-document">${reportMarkup}</main></body></html>`);
     for (const stylesheet of Array.from(document.querySelectorAll('link[rel="stylesheet"]'))) {
       printDocument.head.appendChild(stylesheet.cloneNode(true));
     }
@@ -473,16 +522,17 @@ export const LabPortal: React.FC<LabPortalProps> = ({
         );
         if ("fonts" in printDocument) await printDocument.fonts.ready;
 
-        const report = printDocument.querySelector<HTMLElement>(".lab-report-document");
-        const page = printDocument.getElementById("lab-print-page");
-        if (!report || !page) throw new Error("Lab report content is missing.");
+        const sheets = Array.from(printDocument.querySelectorAll<HTMLElement>(".lab-print-sheet"));
+        if (sheets.length === 0) throw new Error("Lab report content is missing.");
 
-        const availableWidth = page.clientWidth - 20 * (96 / 25.4);
-        const availableHeight = 215 * (96 / 25.4);
-        const contentWidth = report.scrollWidth;
-        const contentHeight = report.scrollHeight;
-        const scale = Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight);
-        report.style.transform = `scale(${scale})`;
+        for (const sheet of sheets) {
+          const report = sheet.querySelector<HTMLElement>(".lab-report-document");
+          if (!report) throw new Error("A lab report sheet is missing its report content.");
+          const availableWidth = sheet.clientWidth - 20 * (96 / 25.4);
+          const availableHeight = 215 * (96 / 25.4);
+          const scale = Math.min(1, availableWidth / report.scrollWidth, availableHeight / report.scrollHeight);
+          report.style.transform = `scale(${scale})`;
+        }
 
         printWindow.focus();
         printWindow.print();
@@ -674,7 +724,8 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
       let resultsObj: Record<string, string> = {};
       try {
-        resultsObj = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
+        const parsed: any = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
+        resultsObj = parsed.__labTests?.[tmpl.code]?.results || parsed.__labTests?.[tmpl.code] || parsed;
       } catch {
         resultsObj = { notes: order.resultsV1 || "" };
       }
@@ -1890,10 +1941,21 @@ export const LabPortal: React.FC<LabPortalProps> = ({
           isOpen
           onClose={() => setSelectedOrderForResult(null)}
           title={`Laboratory Report Result Entry — ${activeTemplate.name}`}
-          subtitle={`Patient: ${selectedOrderForResult.patientName} | MRN: ${selectedOrderForResult.mrNumber}`}
+          subtitle={`${selectedOrderForResult.tests.length > 1 ? `Test ${activeTestIndex + 1} of ${selectedOrderForResult.tests.length} | ` : ""}Patient: ${selectedOrderForResult.patientName} | MRN: ${selectedOrderForResult.mrNumber}`}
           maxWidth="4xl"
         >
           <div className="space-y-6 text-xs max-h-[80vh] overflow-y-auto pr-1">
+            {selectedOrderForResult.tests.length > 1 && (
+              <div className="flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-blue-900 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-200">
+                <div>
+                  <div className="font-black">Test {activeTestIndex + 1} of {selectedOrderForResult.tests.length}</div>
+                  <div className="text-[11px]">Patient details and identity confirmation are shared across all tests in this order.</div>
+                </div>
+                <div className="shrink-0 rounded-lg bg-white px-3 py-1.5 font-mono font-bold dark:bg-slate-900">
+                  {activeTemplate.code}
+                </div>
+              </div>
+            )}
             {/* OFFICIAL HOSPITAL HEADER BANNER WITHIN MODAL */}
             <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-amber-950 p-5 rounded-2xl border border-amber-500/30 text-white flex justify-between items-center">
               <div>
@@ -2056,7 +2118,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
               />
             </div>
 
-            {/* BOTTOM ACTION BUTTON WITH DROPDOWN MENU IN ONE BUTTON */}
+            {/* Save each test form, then finalize or print the complete multi-test report. */}
             <div className="flex justify-between items-center pt-4 border-t">
               <button
                 type="button"
@@ -2066,7 +2128,38 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                 Cancel / Save Draft
               </button>
 
-              {/* UNIFIED ACTION DROPDOWN BUTTON */}
+              {activeTestIndex > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const code = activeTemplate.code;
+                    setDraftResultsByTest((prev) => ({ ...prev, [code]: formResults }));
+                    setDraftRemarksByTest((prev) => ({ ...prev, [code]: technicianNotes }));
+                    setActiveTestIndex((index) => index - 1);
+                  }}
+                  className="px-4 py-2.5 rounded-xl border font-bold text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+                >
+                  Previous Test
+                </button>
+              )}
+
+              {activeTestIndex < selectedOrderForResult.tests.length - 1 && (
+                <button
+                  type="button"
+                  disabled={!identityConfirmed}
+                  onClick={() => {
+                    const code = activeTemplate.code;
+                    setDraftResultsByTest((prev) => ({ ...prev, [code]: formResults }));
+                    setDraftRemarksByTest((prev) => ({ ...prev, [code]: technicianNotes }));
+                    setActiveTestIndex((index) => index + 1);
+                  }}
+                  className={`px-5 py-2.5 rounded-xl font-black text-xs text-white inline-flex items-center gap-2 ${identityConfirmed ? "bg-blue-600 hover:bg-blue-500" : "bg-slate-400 cursor-not-allowed opacity-60"}`}
+                >
+                  <span>Save & Open Next Test</span>
+                  <ArrowRight className="w-4 h-4" />
+                </button>
+              )}
+              {activeTestIndex === selectedOrderForResult.tests.length - 1 && (
               <div className="relative" ref={dropdownRef}>
                 <div className="inline-flex rounded-xl shadow-lg">
                   {/* Primary Action Button */}
@@ -2137,6 +2230,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                   </div>
                 )}
               </div>
+              )}
             </div>
           </div>
         </Modal>

@@ -30,78 +30,78 @@ export async function POST(req: Request) {
     const mrNumber = patient.mrNumber || order.mrNumber || "MR-0000";
     const patientName = patient.fullName || order.patientName || "Patient";
 
-    // 3. Resolve Lab Template
-    const testCode = order.testCategory || (order.items && order.items[0] ? order.items[0].testName : "CBC");
-    const template = (await labTemplateEngine.getTemplate(testCode)) || (await labTemplateEngine.getTemplate("CBC"));
-    if (!template) {
-      return NextResponse.json({ error: "Failed to load matching lab template." }, { status: 500 });
+    // Resolve and evaluate every selected test separately while retaining shared patient/order data.
+    let submittedTests: Record<string, { results: Record<string, string>; remarks?: string }> = body.testResults || {};
+    if (Object.keys(submittedTests).length === 0) {
+      const fallbackCode = body.testCode || order.items?.[0]?.testName || "CBC";
+      let parsed: Record<string, string> = {};
+      try {
+        parsed = typeof resultsJson === "string" ? JSON.parse(resultsJson) : resultsJson;
+      } catch {
+        parsed = { notes: String(resultsJson) };
+      }
+      submittedTests = { [fallbackCode]: { results: parsed, remarks } };
     }
 
-    // Parse entered results JSON
-    let parsedResults: Record<string, string> = {};
-    try {
-      parsedResults = typeof resultsJson === "string" ? JSON.parse(resultsJson) : resultsJson;
-    } catch {
-      parsedResults = { notes: String(resultsJson) };
-    }
-
-    // Evaluate results against ranges
-    const evaluated = labTemplateEngine.evaluateAllResults(template, parsedResults);
-
+    const evaluatedTests: Record<string, { results: Record<string, string>; evaluated: ReturnType<typeof labTemplateEngine.evaluateAllResults>; remarks: string }> = {};
+    const savedDocuments: Array<{ testCode: string; testName: string; fileName: string; relativePath: string }> = [];
     const versionNum = isVersion2 ? 2 : (order.currentVersion || 1);
-    const reportId = `LABREP-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "")}-${versionNum}`;
 
-    // 4. Generate PDF Report Buffer
-    const pdfBuffer = labPdfReportGenerator.generatePdfBuffer({
-      reportId,
-      orderNumber: order.orderNumber,
-      patientName,
-      mrNumber,
-      age: patient.age || 30,
-      gender: patient.gender || "Male",
-      cnic: patient.cnic,
-      phone: patient.phone,
-      admissionId: order.visitId || "OPD",
-      consultantName: order.consultantName || "Dr. Bilal Ahmad",
-      testCategory: order.testCategory || template.category,
-      testName: template.name,
-      sampleDate: new Date().toLocaleDateString(),
-      reportDate: new Date().toLocaleDateString(),
-      technicianName: technicianName || "Lab Technologist",
-      pathologistName: "Dr. Khalid Hassan (M.Phil, FCPS)",
-      template,
-      evaluatedResults: evaluated,
-      remarks,
-      versionNumber: versionNum,
-    });
+    for (const [testCode, submitted] of Object.entries(submittedTests)) {
+      const template = await labTemplateEngine.getTemplate(testCode);
+      if (!template) {
+        return NextResponse.json({ error: `Failed to load lab template for test ${testCode}.` }, { status: 400 });
+      }
+      const parsedResults = submitted?.results && typeof submitted.results === "object" ? submitted.results : {};
+      const testRemarks = submitted?.remarks || remarks || template.defaultRemarks || "";
+      const evaluated = labTemplateEngine.evaluateAllResults(template, parsedResults);
+      evaluatedTests[template.code] = { results: parsedResults, evaluated, remarks: testRemarks };
 
-    const pdfFileName = `${mrNumber}_${template.code}_${reportId}_v${versionNum}.pdf`;
+      const reportId = `LABREP-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "")}-${template.code}-${versionNum}`;
+      const pdfBuffer = labPdfReportGenerator.generatePdfBuffer({
+        reportId,
+        orderNumber: order.orderNumber,
+        patientName,
+        mrNumber,
+        age: patient.age || 30,
+        gender: patient.gender || "Male",
+        cnic: patient.cnic,
+        phone: patient.phone,
+        admissionId: order.visitId || "OPD",
+        consultantName: order.consultantName || "Dr. Bilal Ahmad",
+        testCategory: template.category,
+        testName: template.name,
+        sampleDate: new Date().toLocaleDateString(),
+        reportDate: new Date().toLocaleDateString(),
+        technicianName: technicianName || "Lab Technologist",
+        pathologistName: "Dr. Khalid Hassan (M.Phil, FCPS)",
+        template,
+        evaluatedResults: evaluated,
+        remarks: testRemarks,
+        versionNumber: versionNum,
+      });
 
-    // 5. Store PDF and JSON locally for admitted/all patients via localStorageService
-    const patientInput = {
-      id: patient.id,
-      mrNumber,
-      cnic: patient.cnic,
-      fullName: patientName,
-      gender: patient.gender,
-      age: patient.age,
-      phone: patient.phone,
-    };
+      const pdfFileName = `${mrNumber}_${template.code}_${reportId}_v${versionNum}.pdf`;
+      const patientInput = {
+        id: patient.id,
+        mrNumber,
+        cnic: patient.cnic,
+        fullName: patientName,
+        gender: patient.gender,
+        age: patient.age,
+        phone: patient.phone,
+      };
+      const admissionId = order.visitId || "OPD-VISIT";
+      const savedDoc = localStorageService.saveDocument({
+        patient: patientInput,
+        admissionNumberOrId: admissionId,
+        category: "laboratory",
+        fileName: pdfFileName,
+        data: pdfBuffer,
+        mimeType: "application/pdf",
+      });
 
-    const admissionId = order.visitId || "OPD-VISIT";
-
-    const savedDoc = localStorageService.saveDocument({
-      patient: patientInput,
-      admissionNumberOrId: admissionId,
-      category: "laboratory",
-      fileName: pdfFileName,
-      data: pdfBuffer,
-      mimeType: "application/pdf",
-    });
-
-    // Write structured lab-report.json in local patient folder
-    const metadataJson = JSON.stringify(
-      {
+      const metadataJson = JSON.stringify({
         reportId,
         orderNumber: order.orderNumber,
         mrNumber,
@@ -111,54 +111,55 @@ export async function POST(req: Request) {
         consultantName: order.consultantName,
         testCode: template.code,
         testName: template.name,
+        results: parsedResults,
         evaluatedResults: evaluated,
-        remarks,
+        remarks: testRemarks,
         versionNumber: versionNum,
         pdfFileName: savedDoc.fileName,
         pdfPath: savedDoc.relativePath,
         checksum: savedDoc.checksum,
         finalizedAt: new Date().toISOString(),
-      },
-      null,
-      2
-    );
+      }, null, 2);
+      localStorageService.saveDocument({
+        patient: patientInput,
+        admissionNumberOrId: admissionId,
+        category: "laboratory",
+        fileName: `${mrNumber}_${template.code}_${reportId}_v${versionNum}.json`,
+        data: metadataJson,
+        mimeType: "application/json",
+      });
 
-    localStorageService.saveDocument({
-      patient: patientInput,
-      admissionNumberOrId: admissionId,
-      category: "laboratory",
-      fileName: `${mrNumber}_${template.code}_${reportId}_v${versionNum}.json`,
-      data: metadataJson,
-      mimeType: "application/json",
-    });
+      await prisma.patientDocument.create({
+        data: {
+          patientId: patient.id,
+          visitId: order.visitId || undefined,
+          documentType: "LABORATORY",
+          documentName: `${template.name} Report (${reportId})`,
+          relativePath: savedDoc.relativePath,
+          fileName: savedDoc.fileName,
+          mimeType: "application/pdf",
+          fileSize: savedDoc.fileSize,
+          checksum: savedDoc.checksum,
+          status: "VERIFIED",
+        },
+      });
+      savedDocuments.push({ testCode: template.code, testName: template.name, fileName: savedDoc.fileName, relativePath: savedDoc.relativePath });
+    }
 
-    // 6. Record metadata in PatientDocument model
-    await prisma.patientDocument.create({
-      data: {
-        patientId: patient.id,
-        visitId: order.visitId || undefined,
-        documentType: "LABORATORY",
-        documentName: `${template.name} Report (${reportId})`,
-        relativePath: savedDoc.relativePath,
-        fileName: savedDoc.fileName,
-        mimeType: "application/pdf",
-        fileSize: savedDoc.fileSize,
-        checksum: savedDoc.checksum,
-        status: "VERIFIED",
-      },
-    });
+    const evaluated = Object.values(evaluatedTests)[0]?.evaluated || [];
+    const reportId = `LABREP-${order.orderNumber.replace(/[^a-zA-Z0-9-]/g, "")}-${versionNum}`;
 
-    // 7. Update LabOrder & LabReport in Database
+    // Update the LabOrder & LabReport once with the results from all tests.
     const updatedOrderFields: Record<string, any> = {
       status: isVersion2 ? "ACCEPTED" : "REPORT_PREPARED",
-      attachedPdfName: savedDoc.fileName,
-      attachedPdfUrl: savedDoc.relativePath,
+      attachedPdfName: savedDocuments.map((doc) => doc.fileName).join(", "),
+      attachedPdfUrl: savedDocuments.map((doc) => doc.relativePath).join(";"),
       currentVersion: versionNum,
     };
     if (isVersion2) {
-      updatedOrderFields.resultsV2 = JSON.stringify(evaluated);
+      updatedOrderFields.resultsV2 = JSON.stringify({ __labTests: evaluatedTests });
     } else {
-      updatedOrderFields.resultsV1 = JSON.stringify(evaluated);
+      updatedOrderFields.resultsV1 = JSON.stringify({ __labTests: evaluatedTests });
     }
 
     await labRepository.updateOrderFields(order.id, updatedOrderFields);
@@ -195,10 +196,10 @@ export async function POST(req: Request) {
       versions: [
         {
           versionNumber: versionNum,
-          structuredResult: JSON.stringify(evaluated),
-          summary: remarks || `${template.name} report generated`,
+          structuredResult: JSON.stringify({ __labTests: evaluatedTests }),
+          summary: `${Object.keys(evaluatedTests).length} lab test report(s) generated`,
           performedBy: technicianName || "Lab Technologist",
-          pdfUrl: savedDoc.relativePath,
+          pdfUrl: savedDocuments.map((doc) => doc.relativePath).join(";"),
         },
       ],
     });
@@ -211,7 +212,7 @@ export async function POST(req: Request) {
         entityId: reportId,
         userName: technicianName || "Lab Staff",
         userRole: "LAB_STAFF",
-        description: `Finalized ${template.name} lab report ${reportId} for MRN ${mrNumber} (Patient: ${patientName})`,
+        description: `Finalized ${Object.keys(evaluatedTests).length} lab test report(s) ${reportId} for MRN ${mrNumber} (Patient: ${patientName})`,
         status: "SUCCESS",
       },
     });
@@ -221,8 +222,7 @@ export async function POST(req: Request) {
         message: "Lab report finalized, stored locally, and attached to patient medical record successfully!",
         reportId,
         mrNumber,
-        pdfFileName: savedDoc.fileName,
-        relativePath: savedDoc.relativePath,
+        documents: savedDocuments,
         evaluatedResults: evaluated,
       },
       { status: 200 }

@@ -170,18 +170,16 @@ export class LabPdfReportGenerator {
     const finalY = (doc as any).lastAutoTable.finalY + 8;
 
     // 5. REMARKS & INTERPRETATION
-    if (data.remarks || data.template.interpretationNotes) {
-      doc.setFontSize(8);
-      doc.setFont("helvetica", "bold");
-      doc.setTextColor(15, 23, 42);
-      doc.text("TECHNICIAN REMARKS & CLINICAL INTERPRETATION:", 10, finalY);
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(15, 23, 42);
+    doc.text("REMARKS / CLINICAL INTERPRETATION:", 10, finalY);
 
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(71, 85, 105);
-      const remarkText = data.remarks || data.template.interpretationNotes || "";
-      const splitRemarks = doc.splitTextToSize(remarkText, pageWidth - 20);
-      doc.text(splitRemarks, 10, finalY + 4);
-    }
+    doc.setFont("helvetica", "normal");
+    doc.setTextColor(71, 85, 105);
+    const remarkText = data.remarks || data.template.interpretationNotes || "Correlate clinically with patient symptoms.";
+    const splitRemarks = doc.splitTextToSize(remarkText, pageWidth - 20);
+    doc.text(splitRemarks, 10, finalY + 4);
 
     // 6. FOOTER SIGNATURE & COMPUTER VERIFIED STAMP
     const footerY = 268;
@@ -338,17 +336,11 @@ export class LabPdfReportGenerator {
           </tbody>
         </table>
 
-        <!-- REMARKS & INTERPRETATION -->
-        ${
-          data.remarks || data.template.interpretationNotes
-            ? `
+        <!-- REMARKS & INTERPRETATION (shown on every test report) -->
           <div class="print-remarks mt-4 p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
             <div class="font-bold text-slate-800 mb-1">Remarks / Clinical Interpretation:</div>
-            <p class="text-slate-700 leading-relaxed">${data.remarks || data.template.interpretationNotes}</p>
+            <p class="text-slate-700 leading-relaxed">${data.remarks || data.template.interpretationNotes || "Correlate clinically with patient symptoms."}</p>
           </div>
-        `
-            : ""
-        }
 
         <!-- FOOTER NOTIFICATION -->
         <div class="print-generated-footer mt-8 pt-4 border-t border-slate-300 text-[11px] text-slate-600 space-y-1">

@@ -707,27 +707,40 @@ export function getTemplateByCode(code: string): LabTemplateDef | undefined {
   if (!code) return undefined;
   const normalized = code.trim().toUpperCase();
 
-  // 1. Check custom templates
+  // Resolve exact template codes first. A substring name search for short codes
+  // such as "MP" can otherwise match unrelated names such as "Complete Blood Count".
+  const effectiveDefaults = getEffectiveDefaultTemplates();
   const customTemplates = getCustomTemplates();
-  const customMatch = customTemplates.find(
-    (t) => t.code === normalized || t.name.toUpperCase().includes(normalized)
-  );
-  if (customMatch) return customMatch;
+  const exactCustomMatch = customTemplates.find((t) => t.code.trim().toUpperCase() === normalized);
+  if (exactCustomMatch) return exactCustomMatch;
 
-  // 2. Check direct overrides
   const overrides = getTemplateOverrides();
   if (overrides[normalized]) return overrides[normalized];
 
+  const exactDefaultMatch = effectiveDefaults.find((t) => t.code.trim().toUpperCase() === normalized);
+  if (exactDefaultMatch) return exactDefaultMatch;
+
+  // Legacy Blood CP names/codes refer to the Blood CP template.
   if (normalized === "CP" || normalized === "BLOOD CP" || normalized === "BLOOD_CP") {
     if (overrides["BLOOD_CP"]) return overrides["BLOOD_CP"];
     if (overrides["CBC"]) return overrides["CBC"];
     return DEFAULT_LAB_TEMPLATES.find((t) => t.code === "BLOOD_CP") || DEFAULT_LAB_TEMPLATES.find((t) => t.code === "CBC");
   }
 
-  // 3. Check effective defaults
-  const effectiveDefaults = getEffectiveDefaultTemplates();
+  // Match exact display names before the legacy partial-name fallback.
+  const allTemplates = [...effectiveDefaults, ...customTemplates];
+  const exactNameMatch = allTemplates.find((t) =>
+    t.name.trim().toUpperCase() === normalized || t.fullForm?.trim().toUpperCase() === normalized
+  );
+  if (exactNameMatch) return exactNameMatch;
+
+  // Legacy orders may contain a complete test name rather than its code.
+  const customMatch = customTemplates.find(
+    (t) => normalized.length >= 4 && t.name.toUpperCase().includes(normalized)
+  );
+  if (customMatch) return customMatch;
   const defaultMatch = effectiveDefaults.find(
-    (t) => t.code === normalized || t.name.toUpperCase().includes(normalized)
+    (t) => normalized.length >= 4 && t.name.toUpperCase().includes(normalized)
   );
   if (defaultMatch) return defaultMatch;
 

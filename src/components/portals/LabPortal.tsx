@@ -135,7 +135,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const [customAge, setCustomAge] = useState<number>(35);
   const [customGender, setCustomGender] = useState("Male");
   const [customConsultant, setCustomConsultant] = useState("Dr. Self / Direct Lab Request");
-  const [selectedTestCodesForNew, setSelectedTestCodesForNew] = useState<string[]>(["CBC"]);
+  const [selectedTestCodesForNew, setSelectedTestCodesForNew] = useState<string[]>([]);
   const [newReqTotalAmount, setNewReqTotalAmount] = useState("800");
 
   // Auto-fetched next sequential MRN (read-only preview — actual MRN assigned on backend)
@@ -747,7 +747,22 @@ export const LabPortal: React.FC<LabPortalProps> = ({
 
     // Close creation modal and open result entry pop-up on front!
     setIsCreateNewModalOpen(false);
+    setSelectedTestCodesForNew([]);
+    setNewReqTemplateSearch("");
+    setNewReqTotalAmount("");
     setSelectedOrderForResult(savedOrder);
+  };
+
+  const handleOpenBlankRequisition = () => {
+    setSelectedPatientForNew(null);
+    setCustomMrn("");
+    setCustomPatientName("");
+    setCustomCnic("");
+    setPatientSearchInput("");
+    setSelectedTestCodesForNew([]);
+    setNewReqTemplateSearch("");
+    setNewReqTotalAmount("");
+    setIsCreateNewModalOpen(true);
   };
 
   // Launch Result Entry directly from Test Catalog by opening Requisition Modal with patient input
@@ -1220,14 +1235,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
         <div className="flex flex-wrap items-center gap-3">
           {/* "+ Create New" Button */}
           <button
-            onClick={() => {
-              setSelectedPatientForNew(null);
-              setCustomMrn("");
-              setCustomPatientName("");
-              setCustomCnic("");
-              setPatientSearchInput("");
-              setIsCreateNewModalOpen(true);
-            }}
+            onClick={handleOpenBlankRequisition}
             className="px-5 py-2.5 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs inline-flex items-center gap-2 shadow-lg hover:shadow-amber-500/20 transition-all cursor-pointer transform hover:-translate-y-0.5"
           >
             <Plus className="w-4 h-4 stroke-[3]" />
@@ -1391,7 +1399,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => setIsCreateNewModalOpen(true)}
+                  onClick={handleOpenBlankRequisition}
                   className="px-3 py-1.5 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 font-bold text-xs inline-flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" /> New Patient Test

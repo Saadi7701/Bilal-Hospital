@@ -215,6 +215,7 @@ export interface MedicineRecord {
 
 export interface CashTransactionRecord {
   id: string;
+  patientId?: string;
   transactionNumber: string;
   transactionType: "INCOME" | "EXPENSE" | "REFUND" | "REVERSAL" | "ADJUSTMENT";
   category: string;

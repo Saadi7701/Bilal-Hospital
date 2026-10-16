@@ -35,8 +35,15 @@ export async function GET(req: Request) {
       where: whereClause,
       orderBy: { transactionDate: "desc" },
       take: period === "all" || !period ? 500 : undefined,
+      include: { patient: { select: { fullName: true, mrNumber: true } } },
     });
-    const transactions = records.map((t) => ({ ...t, amount: Number(t.amount || 0), _id: t.id }));
+    const transactions = records.map((t) => ({
+      ...t,
+      amount: Number(t.amount || 0),
+      patientName: t.patient?.fullName || undefined,
+      mrNumber: t.patient?.mrNumber || undefined,
+      _id: t.id,
+    }));
 
     // Monthly Aggregation (Always calculates full month for dashboard totals)
     const monthRecords = await prisma.cashTransaction.findMany({
@@ -128,6 +135,7 @@ export async function POST(req: Request) {
       amount: Number(body.amount),
       paymentMethod: body.paymentMode || body.paymentMethod || "CASH",
       description: body.description || `Cash transaction for ${body.category}`,
+      patientId: body.patientId,
       createdById,
       transactionDate: new Date(),
     });

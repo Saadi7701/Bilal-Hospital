@@ -26,9 +26,7 @@ export async function fetchPatientsFromApi(): Promise<PatientRecord[]> {
         cnic: p.cnic || "",
         address: p.address || "",
         bloodGroup: p.bloodGroup || "UNKNOWN",
-        registrationDate: p.registrationDate
-          ? new Date(p.registrationDate).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
+        registrationDate: toPKTDateString(p.registrationDate || p.createdAt),
       }));
     }
     return [];
@@ -66,14 +64,11 @@ export async function createPatientApi(patient: PatientRecord): Promise<PatientR
       fatherHusbandName: p.fatherHusbandName || p.fatherOrHusbandName || "",
       age: p.age,
       gender: p.gender,
-      phone: p.phone,
-      cnic: p.cnic || "",
-      address: p.address || "",
-      bloodGroup: p.bloodGroup || "UNKNOWN",
-      notes: p.notes || "",
-      registrationDate: p.createdAt
-        ? new Date(p.createdAt).toISOString().split("T")[0]
-        : new Date().toISOString().split("T")[0],
+            phone: p.phone,
+            cnic: p.cnic || "",
+            bloodGroup: p.bloodGroup || "UNKNOWN",
+            notes: p.notes || "",
+            registrationDate: toPKTDateString(p.registrationDate || p.createdAt),
     };
   } catch (err: any) {
     console.error("[API Client Error] Save patient exception:", err.message);
@@ -105,9 +100,7 @@ export async function fetchVisitsFromApi(): Promise<VisitRecord[]> {
         amountReceived: v.amountReceived || v.netCollectedAmount || 0,
         paymentMethod: v.paymentMethod || "CASH",
         status: v.status || "WAITING",
-        visitDate: v.visitDate
-          ? new Date(v.visitDate).toISOString().split("T")[0]
-          : new Date().toISOString().split("T")[0],
+        visitDate: toPKTDateString(v.visitDate || v.createdAt),
         entryInTime: v.arrivalTime
           ? new Date(v.arrivalTime).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })
           : "10:00 AM",
@@ -439,10 +432,11 @@ export async function fetchCashTransactionsFromApi(period: string = "today"): Pr
         amount: Number(t.amount) || 0,
         paymentMethod: t.paymentMethod || t.paymentMode || "CASH",
         description: t.description || `Cash transaction for ${t.category}`,
-        date: t.transactionDate ? new Date(t.transactionDate).toISOString().split("T")[0] : new Date().toISOString().split("T")[0],
+        date: toPKTDateString(t.transactionDate || t.createdAt),
         time: t.transactionDate ? new Date(t.transactionDate).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "12:00 PM",
         patientName: t.patientName,
         mrNumber: t.mrNumber,
+        patientId: t.patientId,
         createdBy: t.enteredBy || t.createdBy || "Staff",
       }));
       if (data.monthlyStats) {
@@ -470,6 +464,7 @@ export async function createCashTransactionApi(transaction: CashTransactionRecor
         amount: transaction.amount,
         paymentMode: transaction.paymentMethod || "CASH",
         description: transaction.description || `Cash transaction for ${transaction.category}`,
+        patientId: transaction.patientId,
       }),
     });
     return res.ok;

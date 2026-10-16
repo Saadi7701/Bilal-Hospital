@@ -29,6 +29,7 @@ import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
 import { Modal } from "../ui/Modal";
 import { AdminLabReports } from "./AdminLabReports";
+import { getTodayPKTString, toPKTDateString } from "../../lib/dateUtils";
 import {
   CashTransactionRecord,
   DailyCashClosingRecord,
@@ -87,6 +88,24 @@ interface MatrixEncounterRow {
   otFee: number;
   gyneFee: number;
   rowTotal: number;
+}
+
+function classifyRevenueDepartment(transaction: CashTransactionRecord): "consultant" | "lab" | "pharmacy" | "ultrasound" | "ot" | "gyne" {
+  const department = String(transaction.department || "").toLowerCase();
+  const category = String(transaction.category || "").toLowerCase();
+  if (department.includes("lab") || category.includes("lab")) return "lab";
+  if (department.includes("pharmacy") || category.includes("pharmacy")) return "pharmacy";
+  if (department.includes("ultrasound") || department.includes("radiology") || category.includes("ultrasound")) return "ultrasound";
+  if (department.includes("gyne") || category.includes("gyne")) return "gyne";
+  if (department === "ot" || department.includes("operation theatre") || category.includes("ot")) return "ot";
+  return "consultant";
+}
+
+function getPatientKey(patient: { mrNumber?: string; patientName?: string; fullName?: string; patientId?: string; id?: string }): string {
+  const key = patient.mrNumber && patient.mrNumber !== "MR-0000"
+    ? patient.mrNumber
+    : patient.patientName || patient.fullName || patient.patientId || patient.id || "";
+  return key.toLowerCase().trim();
 }
 
 export const AdminPortal: React.FC<AdminPortalProps> = ({
@@ -258,28 +277,38 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // DAILY TOTAL PATIENT & DAILY CASH SUMMARY MATRIX (Date-Wise)
   // -------------------------------------------------------------
   const datesSet = new Set<string>();
-  cashTransactions.forEach((t) => datesSet.add(t.date));
-  (visits || []).forEach((v) => datesSet.add(v.visitDate));
+  cashTransactions.forEach((t) => datesSet.add(toPKTDateString(t.date)));
+  visits.forEach((v) => datesSet.add(toPKTDateString(v.visitDate)));
+  patients.forEach((patient) => datesSet.add(toPKTDateString(patient.registrationDate)));
+  labOrders.forEach((order) => datesSet.add(toPKTDateString(order.requestDate || order.createdAt)));
 
   const sortedDates = Array.from(datesSet).sort().reverse();
 
   const dailySummaryRows = sortedDates.map((dateStr) => {
-    const dateVisits = (visits || []).filter((v) => v.visitDate === dateStr);
-    const dateTxns = cashTransactions.filter((t) => t.date === dateStr);
+    const dateVisits = visits.filter((v) => toPKTDateString(v.visitDate) === dateStr);
+    const datePatients = patients.filter((patient) => toPKTDateString(patient.registrationDate) === dateStr);
+    const dateLabOrders = labOrders.filter((order) => toPKTDateString(order.requestDate || order.createdAt) === dateStr);
+    const dateTxns = cashTransactions.filter((t) => toPKTDateString(t.date) === dateStr);
 
     const patientKeysOnDate = new Set<string>();
     dateVisits.forEach((v) => {
-      const key = (v.mrNumber && v.mrNumber !== "MR-0000" ? v.mrNumber : v.patientName || v.patientId || v.id).toLowerCase().trim();
-      patientKeysOnDate.add(key);
+      const key = getPatientKey(v);
+      if (key) patientKeysOnDate.add(key);
+    });
+    datePatients.forEach((patient) => {
+      const key = getPatientKey({ mrNumber: patient.mrNumber, fullName: patient.fullName, id: patient.id });
+      if (key) patientKeysOnDate.add(key);
+    });
+    dateLabOrders.forEach((order) => {
+      const key = getPatientKey({ mrNumber: order.mrNumber, patientName: order.patientName, patientId: order.patientId });
+      if (key) patientKeysOnDate.add(key);
     });
     dateTxns.forEach((t) => {
-      if (t.patientName || t.mrNumber) {
-        const key = (t.mrNumber && t.mrNumber !== "MR-0000" ? t.mrNumber : t.patientName || t.id).toLowerCase().trim();
-        patientKeysOnDate.add(key);
-      }
+      const key = getPatientKey(t);
+      if (key) patientKeysOnDate.add(key);
     });
 
-    const totalPatientsCount = Math.max(patientKeysOnDate.size, dateVisits.length > 0 ? patientKeysOnDate.size : 0);
+    const totalPatientsCount = patientKeysOnDate.size;
 
     let consultantCash = 0;
     let labCash = 0;
@@ -291,18 +320,13 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
     dateTxns.forEach((t) => {
       const amt = Number(t.amount) || 0;
       if (t.transactionType === "INCOME") {
-        if (t.category.includes("Consultation") || t.department === "Cardiology" || t.department === "OPD") {
-          consultantCash += amt;
-        } else if (t.department === "Laboratory" || t.category.includes("Lab")) {
-          labCash += amt;
-        } else if (t.department === "Pharmacy" || t.category.includes("Pharmacy")) {
-          pharmacyCash += amt;
-        } else if (t.department === "Ultrasound" || t.category.includes("Ultrasound")) {
-          ultrasoundCash += amt;
-        } else if (t.department === "OT" || t.department === "Gynecology" || t.category.includes("OT") || t.category.includes("Gyne")) {
-          otGyneCash += amt;
-        } else {
-          consultantCash += amt;
+        switch (classifyRevenueDepartment(t)) {
+          case "lab": labCash += amt; break;
+          case "pharmacy": pharmacyCash += amt; break;
+          case "ultrasound": ultrasoundCash += amt; break;
+          case "ot":
+          case "gyne": otGyneCash += amt; break;
+          default: consultantCash += amt;
         }
       } else if (t.transactionType === "EXPENSE") {
         dailyExpenses += amt;
@@ -331,47 +355,57 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   // MATRIX CASH IN COMPUTATION (Column-by-Column per Patient/Visit)
   // -------------------------------------------------------------
   const matrixMap: Record<string, MatrixEncounterRow> = {};
+  const todayPKT = getTodayPKTString();
+  const ensureMatrixRow = (key: string, date: string, patientName: string, mrNumber: string, time = "") => {
+    if (!key) return;
+    if (!matrixMap[key]) {
+      matrixMap[key] = {
+        key,
+        visitNumber: "—",
+        date,
+        time,
+        patientName: patientName || "Patient",
+        mrNumber: mrNumber || "—",
+        consultantFee: 0,
+        labReportFee: 0,
+        pharmacyFee: 0,
+        ultrasoundFee: 0,
+        otFee: 0,
+        gyneFee: 0,
+        rowTotal: 0,
+      };
+    }
+    if (patientName) matrixMap[key].patientName = patientName;
+    if (mrNumber) matrixMap[key].mrNumber = mrNumber;
+    if (time) matrixMap[key].time = time;
+  };
+
+  patients.filter((patient) => toPKTDateString(patient.registrationDate) === todayPKT).forEach((patient) => {
+    ensureMatrixRow(getPatientKey({ mrNumber: patient.mrNumber, fullName: patient.fullName, id: patient.id }), todayPKT, patient.fullName, patient.mrNumber);
+  });
+  visits.filter((visit) => toPKTDateString(visit.visitDate) === todayPKT).forEach((visit) => {
+    ensureMatrixRow(getPatientKey(visit), todayPKT, visit.patientName, visit.mrNumber, visit.arrivalTime);
+  });
+  labOrders.filter((order) => toPKTDateString(order.requestDate || order.createdAt) === todayPKT).forEach((order) => {
+    ensureMatrixRow(getPatientKey({ mrNumber: order.mrNumber, patientName: order.patientName, patientId: order.patientId }), todayPKT, order.patientName, order.mrNumber);
+  });
 
   cashTransactions
-    .filter((t) => t.transactionType === "INCOME")
+    .filter((t) => t.transactionType === "INCOME" && toPKTDateString(t.date) === todayPKT)
     .forEach((t) => {
-      const key = t.mrNumber || t.patientName || t.id;
-      if (!matrixMap[key]) {
-        matrixMap[key] = {
-          key,
-          visitNumber: t.transactionNumber,
-          date: t.date,
-          time: t.time,
-          patientName: t.patientName || "General OPD Patient",
-          mrNumber: t.mrNumber || "MR-2026-OPD",
-          consultantFee: 0,
-          labReportFee: 0,
-          pharmacyFee: 0,
-          ultrasoundFee: 0,
-          otFee: 0,
-          gyneFee: 0,
-          rowTotal: 0,
-        };
-      }
-
+      const key = getPatientKey(t) || t.id;
+      ensureMatrixRow(key, toPKTDateString(t.date), t.patientName || "General OPD Patient", t.mrNumber || "MR-2026-OPD", t.time);
       const row = matrixMap[key];
+      if (row.visitNumber === "—") row.visitNumber = t.transactionNumber;
       const amt = Number(t.amount) || 0;
 
-      if (t.category.includes("Consultation") || t.department === "Cardiology" || t.department === "OPD") {
-        row.consultantFee = (Number(row.consultantFee) || 0) + amt;
-      } else if (t.department === "Laboratory" || t.category.includes("Lab")) {
-        row.labReportFee = (Number(row.labReportFee) || 0) + amt;
-      } else if (t.department === "Pharmacy" || t.category.includes("Pharmacy")) {
-        row.pharmacyFee = (Number(row.pharmacyFee) || 0) + amt;
-      } else if (t.department === "Ultrasound" || t.category.includes("Ultrasound")) {
-        row.ultrasoundFee = (Number(row.ultrasoundFee) || 0) + amt;
-      } else if (t.department === "OT" || t.category.includes("OT")) {
-        row.otFee = (Number(row.otFee) || 0) + amt;
-      } else if (t.department === "Gynecology" || t.category.includes("Gyne")) {
-        row.gyneFee = (Number(row.gyneFee) || 0) + amt;
-      } else {
-        // Default to Consultant Fee if unspecified
-        row.consultantFee = (Number(row.consultantFee) || 0) + amt;
+      switch (classifyRevenueDepartment(t)) {
+        case "lab": row.labReportFee += amt; break;
+        case "pharmacy": row.pharmacyFee += amt; break;
+        case "ultrasound": row.ultrasoundFee += amt; break;
+        case "ot": row.otFee += amt; break;
+        case "gyne": row.gyneFee += amt; break;
+        default: row.consultantFee += amt;
       }
 
       row.rowTotal =
@@ -767,8 +801,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard
               title="Daily Total Patients"
-              value={dailySummaryRows.length > 0 ? dailySummaryRows.reduce((acc, r) => acc + r.totalPatientsCount, 0) : visits.length}
-              subtitle="Total Encounters Processed"
+              value={dailySummaryRows.find((row) => row.date === getTodayPKTString())?.totalPatientsCount || 0}
+              subtitle="Registered or served across portals"
               icon={Grid}
               iconBg="bg-purple-500/10 text-purple-600 dark:text-purple-400"
             />

@@ -65,6 +65,7 @@ export const PharmacyPortal: React.FC<PharmacyPortalProps> = ({
 
     const newLedgerTxn: CashTransactionRecord = {
       id: `txn-${Date.now()}`,
+      patientId: selectedRxForDispense.patientId,
       transactionNumber: `TXN-PHARM-${String(Date.now()).slice(-4)}`,
       transactionType: "INCOME",
       category: "Pharmacy Sale",

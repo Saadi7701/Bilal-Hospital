@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { CalendarDays, Eye, FlaskConical, Search, X } from "lucide-react";
+import { CalendarDays, Eye, FlaskConical, RefreshCw, Search, X } from "lucide-react";
 import { LabOrderRecord } from "../../lib/mockDataStore";
 import { formatPKTDateAndDay, getTodayPKTString, toPKTDateString } from "../../lib/dateUtils";
 
@@ -45,10 +45,68 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
   const [period, setPeriod] = useState<ReportPeriod>("DAILY");
   const [search, setSearch] = useState("");
   const [selectedOrder, setSelectedOrder] = useState<LabOrderRecord | null>(null);
+  const [allOrders, setAllOrders] = useState<LabOrderRecord[]>(labOrders);
+  const [isLoadingOrders, setIsLoadingOrders] = useState(false);
+  const [loadError, setLoadError] = useState("");
   const today = getTodayPKTString();
   const { start, end } = getPeriodBounds(period, today);
 
-  const visibleOrders = useMemo(() => labOrders
+  const loadAllOrders = React.useCallback(async () => {
+    setIsLoadingOrders(true);
+    setLoadError("");
+    try {
+      const response = await fetch("/api/lab-orders?period=all", { cache: "no-store" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || `Lab orders request failed (${response.status}).`);
+      if (!Array.isArray(data.labOrders)) throw new Error("The lab orders response was not in the expected format.");
+
+      const fetchedOrders: LabOrderRecord[] = data.labOrders.map((order: any) => ({
+        id: order.id || order._id,
+        orderNumber: order.orderNumber || order.labOrderNumber || `LAB-${order.id || order._id}`,
+        patientId: order.patientId || "",
+        patientName: order.patientName || order.patient?.fullName || "",
+        mrNumber: order.mrNumber || order.patient?.mrNumber || "",
+        cnic: order.cnic || order.patient?.cnic || "",
+        age: order.age || order.patient?.age || 35,
+        gender: order.gender || order.patient?.gender || "Male",
+        visitId: order.visitId || "",
+        consultantId: order.consultantId || "",
+        consultantName: order.consultantName || "Doctor",
+        testCategory: order.testCategory || order.category || "General Pathology",
+        tests: Array.isArray(order.items) && order.items.length
+          ? order.items.map((item: any) => item.testName || item.testCode || "Lab test")
+          : Array.isArray(order.tests) ? order.tests : [order.testName || "Lab test"],
+        totalFee: Number(order.totalFee || order.fee) || 0,
+        priority: order.priority === "URGENT" ? "URGENT" : "NORMAL",
+        status: order.status || "ORDERED",
+        requestDate: toPKTDateString(order.requestDate || order.createdAt),
+        createdAt: order.createdAt || order.requestDate,
+        currentVersion: Number(order.currentVersion) || 1,
+        resultsV1: order.resultsV1,
+        resultsV2: order.resultsV2,
+        revisionReason: order.revisionReason,
+        revisionComment: order.revisionComment,
+        attachedPdfName: order.attachedPdfName,
+        attachedPdfUrl: order.attachedPdfUrl,
+        attachedImageBase64: order.attachedImageBase64,
+      }));
+      setAllOrders(fetchedOrders);
+    } catch (error) {
+      setLoadError(error instanceof Error ? error.message : "Could not load lab orders.");
+    } finally {
+      setIsLoadingOrders(false);
+    }
+  }, []);
+
+  React.useEffect(() => {
+    void loadAllOrders();
+  }, [loadAllOrders]);
+
+  React.useEffect(() => {
+    if (labOrders.length > 0) setAllOrders(labOrders);
+  }, [labOrders]);
+
+  const visibleOrders = useMemo(() => allOrders
     .filter((order) => {
       const orderDate = toPKTDateString(order.requestDate || order.createdAt);
       const matchesDate = orderDate >= start && orderDate <= end;
@@ -58,7 +116,7 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
       return matchesDate && matchesSearch;
     })
     .sort((a, b) => toPKTDateString(b.requestDate || b.createdAt).localeCompare(toPKTDateString(a.requestDate || a.createdAt))),
-  [labOrders, search, start, end]);
+  [allOrders, search, start, end]);
 
   const completedCount = visibleOrders.filter((order) => Boolean(order.resultsV1 || order.resultsV2)).length;
   const reportSections = selectedOrder ? readReportResults(selectedOrder) : [];
@@ -85,8 +143,13 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
                 {option.charAt(0) + option.slice(1).toLowerCase()}
               </button>
             ))}
+            <button type="button" onClick={() => void loadAllOrders()} disabled={isLoadingOrders} className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 disabled:opacity-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800">
+              <RefreshCw className={`h-3.5 w-3.5 ${isLoadingOrders ? "animate-spin" : ""}`} /> Refresh
+            </button>
           </div>
         </div>
+
+        {loadError && <div role="alert" className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700 dark:border-rose-900 dark:bg-rose-950/30 dark:text-rose-300">Unable to load lab orders: {loadError}</div>}
 
         <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 dark:border-slate-800 dark:bg-slate-950">
@@ -147,7 +210,7 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
                 </tr>
               );
             })}
-            {visibleOrders.length === 0 && <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">No lab tests found for this period and search.</td></tr>}
+            {visibleOrders.length === 0 && <tr><td colSpan={6} className="px-4 py-12 text-center text-slate-500">{isLoadingOrders ? "Loading lab orders…" : loadError ? "Could not load lab tests. Check the error above and try Refresh." : allOrders.length === 0 ? "No lab orders were returned by the server." : `No lab tests found between ${start} and ${end}. Try another period or search.`}</td></tr>}
           </tbody>
         </table>
       </div>

@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { CalendarDays, Eye, FlaskConical, Printer, RefreshCw, Search, X } from "lucide-react";
 import { LabOrderRecord } from "../../lib/mockDataStore";
 import { formatPKTDateAndDay, getTodayPKTString, toPKTDateString } from "../../lib/dateUtils";
+import { getTemplateByCode } from "../../lib/labTemplateRegistry";
 
 type ReportPeriod = "DAILY" | "WEEKLY" | "MONTHLY";
 
@@ -9,7 +10,7 @@ interface AdminLabReportsProps {
   labOrders: LabOrderRecord[];
 }
 
-function readReportResults(order: LabOrderRecord): Array<{ testName: string; results: Record<string, unknown>; remarks?: string }> {
+function readReportResults(order: LabOrderRecord): Array<{ testName: string; testCode: string; results: Record<string, unknown>; remarks?: string }> {
   const reportText = order.resultsV2 || order.resultsV1;
   if (!reportText) return [];
 
@@ -19,15 +20,16 @@ function readReportResults(order: LabOrderRecord): Array<{ testName: string; res
     if (tests && typeof tests === "object") {
       return Object.entries(tests).map(([testCode, value]: [string, any], index) => ({
         testName: order.tests[index] || testCode,
+        testCode,
         results: Array.isArray(value?.evaluated)
           ? Object.fromEntries(value.evaluated.map((entry: any) => [entry.name || entry.parameterName || entry.parameterId, entry]))
           : value?.results && typeof value.results === "object" ? value.results : value,
         remarks: value?.remarks,
       }));
     }
-    return [{ testName: order.tests.join(", ") || "Lab result", results: parsed && typeof parsed === "object" ? parsed : { Result: parsed } }];
+    return [{ testName: order.tests.join(", ") || "Lab result", testCode: order.tests[0] || "", results: parsed && typeof parsed === "object" ? parsed : { Result: parsed } }];
   } catch {
-    return [{ testName: order.tests.join(", ") || "Lab result", results: { Notes: reportText } }];
+    return [{ testName: order.tests.join(", ") || "Lab result", testCode: order.tests[0] || "", results: { Notes: reportText } }];
   }
 }
 
@@ -257,11 +259,16 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
                           <tbody>
                             {Object.entries(section.results || {}).map(([name, result]) => {
                               const values = result && typeof result === "object" ? result as Record<string, unknown> : null;
+                              const template = getTemplateByCode(section.testCode);
+                              const parameter = template?.parameters.find((item) =>
+                                item.parameterId === String(values?.parameterId || name) ||
+                                item.name.toLowerCase() === name.toLowerCase()
+                              );
                               const value = values ? values.value ?? values.result ?? values.observedValue ?? JSON.stringify(result) : String(result ?? "—");
-                              const unit = values?.unit || "—";
-                              const reference = values?.referenceRange || values?.reference || values?.normalRange || "—";
+                              const unit = values?.unit || parameter?.unit || "—";
+                              const reference = values?.referenceRange || values?.reference || values?.normalRange || parameter?.referenceRange || "—";
                               const flag = values?.flag ? String(values.flag) : "";
-                              return <tr key={name} className={flag && flag !== "NORMAL" ? "bg-rose-50" : ""}><td className="border border-slate-300 px-3 py-2 font-semibold">{name}</td><td className={`border border-slate-300 px-3 py-2 font-bold ${flag && flag !== "NORMAL" ? "text-rose-700" : ""}`}>{String(value)}{flag && flag !== "NORMAL" ? ` (${flag})` : ""}</td><td className="border border-slate-300 px-3 py-2">{String(unit)}</td><td className="whitespace-pre-line border border-slate-300 px-3 py-2">{String(reference)}</td></tr>;
+                              return <tr key={name} className={flag && flag !== "NORMAL" ? "bg-rose-50" : ""}><td className="border border-slate-300 px-3 py-2 font-semibold">{parameter?.name || name}</td><td className={`border border-slate-300 px-3 py-2 font-bold ${flag && flag !== "NORMAL" ? "text-rose-700" : ""}`}>{String(value)}{flag && flag !== "NORMAL" ? ` (${flag})` : ""}</td><td className="border border-slate-300 px-3 py-2">{String(unit)}</td><td className="whitespace-pre-line border border-slate-300 px-3 py-2">{String(reference)}</td></tr>;
                             })}
                           </tbody>
                         </table>

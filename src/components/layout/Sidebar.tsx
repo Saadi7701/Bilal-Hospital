@@ -50,6 +50,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "cash_out_table", label: "Daily Cash Out Table (Causes)", icon: TrendingDown },
           { id: "cash_ledger", label: "All Transactions Ledger", icon: Wallet },
           { id: "cash_closing", label: "Daily Cash Closing", icon: Lock },
+          { id: "admin_lab_reports", label: "Lab Tests & Reports", icon: FlaskConical },
           { id: "users_rbac", label: "User Roles & Staff Passwords", icon: ShieldCheck },
           { id: "audit_logs", label: "Immutable Audit Logs", icon: History },
           { id: "system_health", label: "DB, PITR & Backup Health", icon: Server },

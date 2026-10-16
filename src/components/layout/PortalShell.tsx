@@ -446,6 +446,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
               consultants={consultants}
               patients={patients}
               visits={visits}
+              labOrders={labOrders}
               onAddExpense={handleAddExpense}
               onAddReversal={handleAddReversal}
               onAddConsultant={handleAddConsultant}

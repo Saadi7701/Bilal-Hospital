@@ -28,10 +28,12 @@ import {
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
 import { Modal } from "../ui/Modal";
+import { AdminLabReports } from "./AdminLabReports";
 import {
   CashTransactionRecord,
   DailyCashClosingRecord,
   ConsultantUser,
+  LabOrderRecord,
   PatientRecord,
   VisitRecord,
 } from "../../lib/mockDataStore";
@@ -60,6 +62,7 @@ interface AdminPortalProps {
   consultants?: ConsultantUser[];
   patients?: PatientRecord[];
   visits?: VisitRecord[];
+  labOrders?: LabOrderRecord[];
   onAddExpense: (transaction: CashTransactionRecord) => void;
   onAddReversal: (originalTxnId: string, reason: string) => void;
   onAddConsultant?: (consultant: ConsultantUser) => void;
@@ -92,6 +95,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
   consultants = [],
   patients = [],
   visits = [],
+  labOrders = [],
   onAddExpense,
   onAddReversal,
   onAddConsultant,
@@ -757,7 +761,7 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
       {/* TAB 3: EXECUTIVE CHARTS & DAILY ANALYSIS DASHBOARD (NO TABLE) */}
       {(activeTab === "analytics" ||
         activeTab === "overview" ||
-        !["cash_in_table", "cash_out_table", "cash_ledger", "cash_closing", "system_health", "audit_logs", "users_rbac"].includes(activeTab)) && (
+        !["cash_in_table", "cash_out_table", "cash_ledger", "cash_closing", "admin_lab_reports", "system_health", "audit_logs", "users_rbac"].includes(activeTab)) && (
         <div className="space-y-6">
           {/* Top Quick Metrics Boxes */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -959,6 +963,8 @@ export const AdminPortal: React.FC<AdminPortalProps> = ({
           </div>
         </div>
       )}
+
+      {activeTab === "admin_lab_reports" && <AdminLabReports labOrders={labOrders} />}
 
       {/* TAB 4: ALL TRANSACTIONS LEDGER */}
       {activeTab === "cash_ledger" && (

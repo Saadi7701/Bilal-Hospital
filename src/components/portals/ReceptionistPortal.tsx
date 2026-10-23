@@ -26,6 +26,8 @@ import {
   ShieldCheck,
   FileSpreadsheet,
   FlaskConical,
+  Zap,
+  User,
 } from "lucide-react";
 import { StatCard } from "../ui/StatCard";
 import { Badge } from "../ui/Badge";
@@ -272,6 +274,175 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
   // Inpatient Filter State
   const [inpatientFilter, setInpatientFilter] = useState<"ACTIVE" | "ALL" | "DISCHARGED" | "OT" | "GYNE">("ACTIVE");
+
+  // ─── DIRECT ENCOUNTER (WALK-IN WITHOUT REGISTRATION) STATE ───────────────────
+  const [directEncounterName, setDirectEncounterName] = useState("");
+  const [directEncounterFatherName, setDirectEncounterFatherName] = useState("");
+  const [directEncounterAge, setDirectEncounterAge] = useState("");
+  const [directEncounterGender, setDirectEncounterGender] = useState("Male");
+  const [directEncounterPhone, setDirectEncounterPhone] = useState("");
+  const [directEncounterDestination, setDirectEncounterDestination] = useState<
+    "OPD" | "LAB" | "ULTRASOUND"
+  >("OPD");
+  const [directEncounterConsultantId, setDirectEncounterConsultantId] = useState("doc-1");
+  const [directEncounterLabCodes, setDirectEncounterLabCodes] = useState<string[]>(["CBC"]);
+  const [directEncounterUsExam, setDirectEncounterUsExam] = useState("Pelvic / Whole Abdomen Scan");
+  const [directEncounterFee, setDirectEncounterFee] = useState<number>(2000);
+  const [directEncounterPayment, setDirectEncounterPayment] = useState("CASH");
+  const [directEncounterLabSearch, setDirectEncounterLabSearch] = useState("");
+  const [directEncounterSubmitted, setDirectEncounterSubmitted] = useState(false);
+  const [lastDirectVisit, setLastDirectVisit] = useState<VisitRecord | null>(null);
+
+  const toggleDirectLabTest = (code: string) => {
+    let next: string[];
+    if (directEncounterLabCodes.includes(code)) {
+      next = directEncounterLabCodes.filter((c) => c !== code);
+    } else {
+      next = [...directEncounterLabCodes, code];
+    }
+    setDirectEncounterLabCodes(next);
+    const total = next.reduce((sum, c) => sum + (LAB_TEST_PRICES[c] || 800), 0);
+    setDirectEncounterFee(total > 0 ? total : 800);
+  };
+
+  const filteredDirectLabTemplates = DEFAULT_LAB_TEMPLATES.filter((tmpl) => {
+    if (!directEncounterLabSearch.trim()) return true;
+    const q = directEncounterLabSearch.toLowerCase();
+    return (
+      tmpl.code.toLowerCase().includes(q) ||
+      tmpl.name.toLowerCase().includes(q) ||
+      (tmpl.fullForm && tmpl.fullForm.toLowerCase().includes(q))
+    );
+  });
+
+  const handleDirectEncounterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!directEncounterName.trim()) {
+      alert("Patient name is required.");
+      return;
+    }
+
+    const dateNow = new Date().toISOString().split("T")[0];
+    const arrivalNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    // Generate a temporary walk-in MRN that clearly marks it as unregistered
+    const walkInMrn = `WALKIN-${Date.now().toString().slice(-6)}`;
+    const tempPatientId = `walkin-pat-${Date.now()}`;
+
+    let serviceFee = directEncounterFee;
+    let destinationType: VisitRecord["destinationType"] = directEncounterDestination;
+    let consultantName = "Walk-In OPD";
+    let department = "General OPD";
+    let reasonForVisit = "Walk-In OPD Consultation";
+    let visitStatus: VisitRecord["status"] = "WAITING";
+    let labOrder: LabOrderRecord | null = null;
+
+    if (directEncounterDestination === "OPD") {
+      const doc = activeConsultantsList.find((c) => c.id === directEncounterConsultantId);
+      consultantName = doc ? doc.name : "Dr. Bilal Ahmad";
+      department = doc ? doc.dept : "General OPD";
+      reasonForVisit = "OPD Consultation";
+      visitStatus = "WAITING";
+      serviceFee = serviceFee > 0 ? serviceFee : (doc?.fee || 2000);
+    } else if (directEncounterDestination === "LAB") {
+      const selectedTemplates = directEncounterLabCodes
+        .map((code) => DEFAULT_LAB_TEMPLATES.find((t) => t.code === code))
+        .filter(Boolean);
+      const testNamesList = selectedTemplates.map((t) => t!.name);
+      reasonForVisit = testNamesList.join(", ") || "Lab Tests";
+      consultantName = "Direct Lab Request (Walk-In)";
+      department = "Laboratory";
+      visitStatus = "LAB_REQUESTED";
+      const calcFee = directEncounterLabCodes.reduce((acc, c) => acc + (LAB_TEST_PRICES[c] || 800), 0);
+      serviceFee = serviceFee > 0 ? serviceFee : calcFee;
+
+      labOrder = {
+        id: `lab-${Date.now()}`,
+        orderNumber: `LAB-WI-${Date.now().toString().slice(-6)}`,
+        patientId: tempPatientId,
+        patientName: directEncounterName,
+        mrNumber: walkInMrn,
+        cnic: "",
+        age: parseInt(directEncounterAge) || 0,
+        gender: directEncounterGender,
+        visitId: `vis-${Date.now()}`,
+        consultantId: "c-reception",
+        consultantName: "Direct Lab Request (Walk-In Reception)",
+        testCategory: selectedTemplates[0]?.category || "General Pathology",
+        tests: testNamesList.length > 0 ? testNamesList : ["Complete Blood Count (CBC)"],
+        totalFee: serviceFee,
+        priority: "NORMAL",
+        status: "ORDERED",
+        requestDate: dateNow,
+        currentVersion: 1,
+      };
+    } else if (directEncounterDestination === "ULTRASOUND") {
+      consultantName = "Dr. Kamran Raza";
+      department = "Ultrasound";
+      reasonForVisit = directEncounterUsExam;
+      visitStatus = "ULTRASOUND_REQUESTED";
+      serviceFee = serviceFee > 0 ? serviceFee : 3000;
+    }
+
+    const newVisit: VisitRecord = {
+      id: `vis-${Date.now()}`,
+      visitNumber: `VIS-WI-${Date.now().toString().slice(-6)}`,
+      patientId: tempPatientId,
+      patientName: directEncounterName,
+      mrNumber: walkInMrn,
+      destinationType,
+      consultantId: directEncounterDestination === "OPD" ? directEncounterConsultantId : directEncounterDestination === "LAB" ? "doc-4" : "doc-3",
+      consultantName,
+      department,
+      consultationFee: serviceFee,
+      amountReceived: serviceFee,
+      paymentMethod: directEncounterPayment,
+      status: visitStatus,
+      reasonForVisit,
+      visitDate: dateNow,
+      arrivalTime: arrivalNow,
+    };
+
+    const newLedgerTxn: CashTransactionRecord = {
+      id: `txn-${Date.now()}`,
+      transactionNumber: `TXN-WI-${Date.now().toString().slice(-4)}`,
+      transactionType: "INCOME",
+      category: directEncounterDestination === "OPD" ? "OPD Fee" : directEncounterDestination === "LAB" ? "Laboratory Test" : "Ultrasound",
+      department,
+      amount: serviceFee,
+      paymentMethod: directEncounterPayment,
+      description: `Walk-In ${directEncounterDestination} - ${directEncounterName} (Age: ${directEncounterAge}/${directEncounterGender})`,
+      date: dateNow,
+      time: arrivalNow,
+      patientName: directEncounterName,
+      mrNumber: walkInMrn,
+      createdBy: "Ayesha Khan (Receptionist)",
+    };
+
+    onAddVisit(newVisit, newLedgerTxn);
+    if (labOrder) {
+      createLabOrderApi(labOrder);
+    }
+
+    setLastDirectVisit(newVisit);
+    setDirectEncounterSubmitted(true);
+    printReceiptDirect(newVisit);
+
+    // Reset form
+    setDirectEncounterName("");
+    setDirectEncounterFatherName("");
+    setDirectEncounterAge("");
+    setDirectEncounterGender("Male");
+    setDirectEncounterPhone("");
+    setDirectEncounterDestination("OPD");
+    setDirectEncounterConsultantId("doc-1");
+    setDirectEncounterLabCodes(["CBC"]);
+    setDirectEncounterUsExam("Pelvic / Whole Abdomen Scan");
+    setDirectEncounterFee(2000);
+    setDirectEncounterPayment("CASH");
+    setDirectEncounterLabSearch("");
+
+    setTimeout(() => setDirectEncounterSubmitted(false), 4000);
+  };
 
   // Consultants list
   const activeConsultantsList = [
@@ -1586,6 +1757,349 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* VIEW: DIRECT ENCOUNTER (WALK-IN WITHOUT REGISTRATION) */}
+      {activeTab === "direct_encounter" && (
+        <div className="space-y-6">
+          {/* Header Banner */}
+          <div className="bg-gradient-to-r from-amber-600 via-orange-600 to-rose-700 p-6 rounded-2xl border border-amber-500/30 shadow-xl text-white">
+            <div className="flex items-center gap-2 text-amber-200 text-xs font-bold uppercase tracking-wider mb-1">
+              <Zap className="w-4 h-4" />
+              <span>Walk-In Express Lane — No Registration Required</span>
+            </div>
+            <h2 className="text-2xl font-black tracking-tight">Direct Encounter (Unregistered Patient)</h2>
+            <p className="text-xs text-amber-100 mt-1">
+              Use for walk-in patients who don't need a permanent MR profile. A temporary Walk-In ID is generated, fee is collected, receipt is printed, and the encounter is logged in the daily register.
+            </p>
+          </div>
+
+          {/* Success Banner after submission */}
+          {directEncounterSubmitted && lastDirectVisit && (
+            <div className="flex items-center gap-3 p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border-2 border-emerald-400 dark:border-emerald-700 animate-fadeIn">
+              <CheckCircle2 className="w-6 h-6 text-emerald-600 shrink-0" />
+              <div>
+                <p className="font-black text-emerald-900 dark:text-emerald-200 text-sm">Encounter Registered Successfully!</p>
+                <p className="text-xs text-emerald-700 dark:text-emerald-400 font-medium">
+                  Walk-In ID: <strong className="font-mono">{lastDirectVisit.mrNumber}</strong> &nbsp;|&nbsp;
+                  Visit: <strong className="font-mono">{lastDirectVisit.visitNumber}</strong> &nbsp;|&nbsp;
+                  Fee Collected: <strong>Rs. {lastDirectVisit.amountReceived}</strong> &nbsp;|&nbsp;
+                  Destination: <strong>{lastDirectVisit.destinationType}</strong>
+                  &nbsp;— Receipt printed!
+                </p>
+              </div>
+            </div>
+          )}
+
+          {/* Main Form Card */}
+          <form onSubmit={handleDirectEncounterSubmit} className="bg-white dark:bg-slate-900 border-2 border-amber-400/50 dark:border-amber-600/40 rounded-2xl shadow-xl overflow-hidden">
+            {/* Section A: Patient Identity */}
+            <div className="bg-amber-50/60 dark:bg-amber-950/20 border-b border-amber-200 dark:border-amber-800/40 p-5">
+              <h3 className="text-xs font-black uppercase tracking-wider text-amber-700 dark:text-amber-400 flex items-center gap-2 mb-4">
+                <User className="w-4 h-4" />
+                A. Patient Identity (Temporary — Not Saved to MR Database)
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Patient Full Name <span className="text-rose-500">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={directEncounterName}
+                    onChange={(e) => setDirectEncounterName(e.target.value)}
+                    placeholder="e.g. Ayesha Bibi"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Father / Husband Name</label>
+                  <input
+                    type="text"
+                    value={directEncounterFatherName}
+                    onChange={(e) => setDirectEncounterFatherName(e.target.value)}
+                    placeholder="e.g. Muhammad Saleem"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Phone Number</label>
+                  <input
+                    type="text"
+                    value={directEncounterPhone}
+                    onChange={(e) => setDirectEncounterPhone(e.target.value)}
+                    placeholder="03XX-XXXXXXX"
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-mono text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Age <span className="text-rose-500">*</span></label>
+                  <input
+                    type="number"
+                    required
+                    value={directEncounterAge}
+                    onChange={(e) => setDirectEncounterAge(e.target.value)}
+                    placeholder="e.g. 35"
+                    min={0}
+                    max={120}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Gender <span className="text-rose-500">*</span></label>
+                  <select
+                    value={directEncounterGender}
+                    onChange={(e) => setDirectEncounterGender(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400"
+                  >
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div className="flex items-end">
+                  <div className="w-full p-3 rounded-xl bg-amber-100 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 text-amber-800 dark:text-amber-200">
+                    <p className="text-[10px] font-black uppercase tracking-wider">Walk-In MRN (Auto)</p>
+                    <p className="font-mono font-bold text-xs mt-0.5">WALKIN-XXXXXX</p>
+                    <p className="text-[10px] opacity-70 mt-0.5">Generated at submission</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Section B: Service Selection */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 space-y-4 text-xs">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                <Activity className="w-4 h-4 text-amber-500" />
+                B. Service / Destination Required
+              </h3>
+
+              <div className="flex flex-wrap gap-3">
+                {[
+                  { val: "OPD", label: "OPD Consultation", color: "blue", icon: Stethoscope },
+                  { val: "LAB", label: "Laboratory Tests", color: "indigo", icon: FlaskConical },
+                  { val: "ULTRASOUND", label: "Ultrasound Scan", color: "emerald", icon: Radio },
+                ].map(({ val, label, color, icon: Icon }) => (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => {
+                      setDirectEncounterDestination(val as any);
+                      if (val === "OPD") {
+                        const doc = activeConsultantsList.find((c) => c.id === directEncounterConsultantId);
+                        setDirectEncounterFee(doc?.fee || 2000);
+                      } else if (val === "LAB") {
+                        const calcFee = directEncounterLabCodes.reduce((acc, c) => acc + (LAB_TEST_PRICES[c] || 800), 0);
+                        setDirectEncounterFee(calcFee > 0 ? calcFee : 800);
+                      } else if (val === "ULTRASOUND") {
+                        setDirectEncounterFee(3000);
+                      }
+                    }}
+                    className={`flex items-center gap-2 px-5 py-3 rounded-xl font-bold border-2 transition-all cursor-pointer ${
+                      directEncounterDestination === val
+                        ? "bg-amber-500 text-white border-amber-500 shadow-lg scale-105"
+                        : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-300"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+
+              {/* OPD Consultant Selection */}
+              {directEncounterDestination === "OPD" && (
+                <div className="p-4 rounded-xl bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 space-y-3">
+                  <label className="font-extrabold text-blue-700 dark:text-blue-300 flex items-center gap-2">
+                    <Stethoscope className="w-4 h-4" /> Select Consultant:
+                  </label>
+                  <select
+                    value={directEncounterConsultantId}
+                    onChange={(e) => {
+                      setDirectEncounterConsultantId(e.target.value);
+                      const doc = activeConsultantsList.find((c) => c.id === e.target.value);
+                      if (doc) setDirectEncounterFee(doc.fee);
+                    }}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 font-bold text-slate-900 dark:text-white"
+                  >
+                    {activeConsultantsList.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} — {c.dept} (Rs. {c.fee})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* LAB Test Selection */}
+              {directEncounterDestination === "LAB" && (
+                <div className="p-4 rounded-xl bg-indigo-50 dark:bg-indigo-950/20 border border-indigo-200 dark:border-indigo-800/40 space-y-3">
+                  <label className="font-extrabold text-indigo-700 dark:text-indigo-300 flex items-center gap-2">
+                    <FlaskConical className="w-4 h-4" /> Select Lab Tests:
+                  </label>
+                  {/* Quick Popular Tests */}
+                  <div className="flex flex-wrap gap-1.5">
+                    {POPULAR_LAB_CODES.map((code) => {
+                      const tmpl = DEFAULT_LAB_TEMPLATES.find((t) => t.code === code);
+                      if (!tmpl) return null;
+                      const isSelected = directEncounterLabCodes.includes(code);
+                      return (
+                        <button
+                          key={code}
+                          type="button"
+                          onClick={() => toggleDirectLabTest(code)}
+                          className={`px-3 py-1.5 rounded-xl font-bold text-xs transition-all flex items-center gap-1.5 cursor-pointer ${
+                            isSelected
+                              ? "bg-indigo-600 text-white ring-2 ring-indigo-400 scale-105"
+                              : "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:border-indigo-400"
+                          }`}
+                        >
+                          {isSelected ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" /> : <Plus className="w-3.5 h-3.5 text-slate-400" />}
+                          {code}
+                          <span className="text-[10px] opacity-70 font-mono">Rs. {LAB_TEST_PRICES[code] || 800}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Search */}
+                  <div className="relative">
+                    <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search tests..."
+                      value={directEncounterLabSearch}
+                      onChange={(e) => setDirectEncounterLabSearch(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 text-xs font-semibold text-slate-900 dark:text-white"
+                    />
+                  </div>
+                  {/* Test Grid */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 max-h-48 overflow-y-auto pr-1">
+                    {filteredDirectLabTemplates.map((tmpl) => {
+                      const isSelected = directEncounterLabCodes.includes(tmpl.code);
+                      const price = LAB_TEST_PRICES[tmpl.code] || 800;
+                      return (
+                        <div
+                          key={tmpl.code}
+                          onClick={() => toggleDirectLabTest(tmpl.code)}
+                          className={`p-2.5 rounded-xl border cursor-pointer select-none transition-all ${
+                            isSelected
+                              ? "bg-indigo-50 dark:bg-indigo-950/80 border-indigo-500 ring-2 ring-indigo-400/50"
+                              : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 hover:border-indigo-300"
+                          }`}
+                        >
+                          <p className="font-black text-xs text-slate-900 dark:text-white">{tmpl.name}</p>
+                          <p className="text-emerald-600 dark:text-emerald-400 font-mono font-bold text-[11px]">Rs. {price}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  {/* Selected tests summary */}
+                  {directEncounterLabCodes.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {directEncounterLabCodes.map((code) => (
+                        <span
+                          key={code}
+                          className="px-2.5 py-1 rounded-lg bg-indigo-100 dark:bg-indigo-950/60 border border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200 text-xs font-bold flex items-center gap-1.5"
+                        >
+                          {code}
+                          <button type="button" onClick={() => toggleDirectLabTest(code)} className="text-indigo-400 hover:text-rose-500 font-bold cursor-pointer">×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* ULTRASOUND Selection */}
+              {directEncounterDestination === "ULTRASOUND" && (
+                <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 space-y-3">
+                  <label className="font-extrabold text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                    <Radio className="w-4 h-4" /> Ultrasound Exam Type:
+                  </label>
+                  <select
+                    value={directEncounterUsExam}
+                    onChange={(e) => setDirectEncounterUsExam(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-emerald-300 dark:border-emerald-700 font-bold text-slate-900 dark:text-white"
+                  >
+                    <option>Pelvic / Whole Abdomen Scan</option>
+                    <option>Obstetric (Pregnancy) Scan</option>
+                    <option>Upper Abdomen (Liver, GB, Pancreas)</option>
+                    <option>Renal / KUB Scan</option>
+                    <option>Thyroid Scan</option>
+                    <option>Breast Ultrasound</option>
+                    <option>Scrotal / Testicular Scan</option>
+                    <option>Soft Tissue / Neck</option>
+                    <option>Guided Biopsy / Aspiration</option>
+                    <option>Doppler Study</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* Section C: Fee & Payment */}
+            <div className="p-5 bg-slate-50 dark:bg-slate-800/30 space-y-4 text-xs">
+              <h3 className="text-xs font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-amber-500" />
+                C. Fee Collection
+              </h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Total Fee Amount (Rs.) *</label>
+                  <input
+                    type="number"
+                    value={directEncounterFee}
+                    onChange={(e) => setDirectEncounterFee(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-mono font-bold text-emerald-600 text-base"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold mb-1 text-slate-700 dark:text-slate-200">Payment Method *</label>
+                  <select
+                    value={directEncounterPayment}
+                    onChange={(e) => setDirectEncounterPayment(e.target.value)}
+                    className="w-full px-3 py-2 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 font-bold text-slate-900 dark:text-white"
+                  >
+                    <option value="CASH">Cash</option>
+                    <option value="CARD">Credit / Debit Card</option>
+                    <option value="BANK_TRANSFER">Bank Transfer</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Fee Summary preview */}
+              <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-300 dark:border-emerald-700 flex items-center justify-between">
+                <span className="font-bold text-emerald-800 dark:text-emerald-300">
+                  {directEncounterName || "Patient"} &nbsp;•&nbsp; {directEncounterDestination}&nbsp;•&nbsp;
+                  {directEncounterPayment}
+                </span>
+                <span className="font-mono font-black text-lg text-emerald-700 dark:text-emerald-300">
+                  Rs. {directEncounterFee.toLocaleString()}
+                </span>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="submit"
+                  className="px-8 py-3 rounded-xl bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black text-sm shadow-xl shadow-amber-600/30 flex items-center gap-3 transition-all cursor-pointer"
+                >
+                  <Zap className="w-5 h-5" />
+                  <span>Collect Fee &amp; Generate Walk-In Receipt</span>
+                  <Send className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Info Box */}
+          <div className="p-4 rounded-2xl bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/40 text-xs text-blue-800 dark:text-blue-300">
+            <p className="font-bold mb-1 flex items-center gap-2"><AlertTriangle className="w-4 h-4 text-amber-500" /> Important Notes:</p>
+            <ul className="list-disc pl-5 space-y-1 font-medium">
+              <li>Walk-In encounters are <strong>NOT</strong> linked to a permanent MR profile. The patient won't appear in the Patient Registry.</li>
+              <li>A temporary <strong>WALKIN-XXXXXX</strong> ID is assigned. It appears in the daily visit log and cash ledger.</li>
+              <li>If the patient returns or needs a full profile, use <strong>"Search &amp; Register Patient"</strong> and then <strong>"New Encounter &amp; Fee"</strong>.</li>
+              <li>For Lab walk-ins, the order is automatically dispatched to the Laboratory Portal queue.</li>
+            </ul>
           </div>
         </div>
       )}

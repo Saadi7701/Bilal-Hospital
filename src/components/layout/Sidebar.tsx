@@ -28,6 +28,7 @@ import {
   CheckCircle2,
   Folder,
   FlaskConical,
+  Zap,
 } from "lucide-react";
 
 interface SidebarProps {
@@ -60,6 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "overview", label: "Reception Dashboard", icon: LayoutDashboard },
           { id: "patient_search", label: "Search & Register Patient", icon: Search },
           { id: "new_visit", label: "New Encounter & Fee", icon: Calendar },
+          { id: "direct_encounter", label: "Direct Encounter (Walk-In)", icon: Zap },
           { id: "ot_gyne_reg", label: "OT & Gyne Admission", icon: Bed },
           { id: "hospital_forms", label: "Hospital Forms", icon: FileText },
           { id: "patient_archive", label: "Patient Files / Archive", icon: Folder },

@@ -315,7 +315,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
     );
   });
 
-  const handleDirectEncounterSubmit = (e: React.FormEvent) => {
+  const handleDirectEncounterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!directEncounterName.trim()) {
       alert("Patient name is required.");
@@ -324,9 +324,36 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
     const dateNow = new Date().toISOString().split("T")[0];
     const arrivalNow = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-    // Generate a temporary walk-in MRN that clearly marks it as unregistered
-    const walkInMrn = `WALKIN-${Date.now().toString().slice(-6)}`;
-    const tempPatientId = `walkin-pat-${Date.now()}`;
+
+    // ── Step 1: Create a real walk-in Patient record in the DB first ──────────
+    // This ensures the PatientVisit FK constraint is satisfied.
+    let realPatientId: string = `walkin-pat-${Date.now()}`; // fallback (should not reach DB)
+    let walkInMrn = `WALKIN-${Date.now().toString().slice(-6)}`;
+
+    try {
+      const { createPatientApi } = await import("../../lib/apiClient");
+      const createdPatient = await createPatientApi({
+        id: realPatientId,
+        fullName: directEncounterName.trim(),
+        fatherHusbandName: directEncounterFatherName.trim() || "",
+        fatherOrHusbandName: directEncounterFatherName.trim() || "",
+        age: parseInt(directEncounterAge) || 0,
+        gender: directEncounterGender,
+        phone: directEncounterPhone.trim() || "0000000000",
+        cnic: "",
+        address: "",
+        bloodGroup: "UNKNOWN",
+        mrNumber: "",
+        registrationDate: dateNow,
+      } as any);
+
+      if (createdPatient && createdPatient.id) {
+        realPatientId = createdPatient.id;
+        walkInMrn = createdPatient.mrNumber || walkInMrn;
+      }
+    } catch (err) {
+      console.warn("[Walk-In] Could not pre-create patient record; visit may fail FK check:", err);
+    }
 
     let serviceFee = directEncounterFee;
     let destinationType: VisitRecord["destinationType"] = directEncounterDestination;
@@ -358,7 +385,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
       labOrder = {
         id: `lab-${Date.now()}`,
         orderNumber: `LAB-WI-${Date.now().toString().slice(-6)}`,
-        patientId: tempPatientId,
+        patientId: realPatientId,
         patientName: directEncounterName,
         mrNumber: walkInMrn,
         cnic: "",
@@ -386,7 +413,7 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
     const newVisit: VisitRecord = {
       id: `vis-${Date.now()}`,
       visitNumber: `VIS-WI-${Date.now().toString().slice(-6)}`,
-      patientId: tempPatientId,
+      patientId: realPatientId,   // ← real DB patient ID (FK satisfied)
       patientName: directEncounterName,
       mrNumber: walkInMrn,
       destinationType,

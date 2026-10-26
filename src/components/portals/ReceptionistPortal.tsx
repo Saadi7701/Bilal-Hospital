@@ -118,41 +118,148 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
   const [selectedPatientForVisit, setSelectedPatientForVisit] = useState<PatientRecord | null>(null);
   const [printedReceipt, setPrintedReceipt] = useState<VisitRecord | null>(null);
 
-  const printReceiptDirect = (receipt: VisitRecord) => {
+  const printReceiptDirect = (receipt: VisitRecord, extraInfo?: { fatherName?: string; age?: string | number; gender?: string; phone?: string }) => {
     const r = receipt;
-    const win = window.open("", "_blank", "width=400,height=600,scrollbars=no");
+    const now = new Date();
+    const timeStr = now.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    const dateStr = r.visitDate || now.toISOString().split("T")[0];
+    const win = window.open("", "_blank", "width=420,height=700,scrollbars=no");
     if (!win) { alert("Please allow popups to print the receipt."); return; }
 
     win.document.write(`<!DOCTYPE html>
-<html><head><meta charset="UTF-8"/><title>Receipt</title>
+<html><head><meta charset="UTF-8"/><title>Bilal Hospital Receipt</title>
 <style>
-  @page { size: 80mm auto; margin: 5mm; }
-  * { box-sizing: border-box; }
-  body { font-family: 'Courier New', monospace; font-size: 9.5pt; color: #000; background: #fff; margin: 0; padding: 0; width: 80mm; }
-  .center { text-align: center; }
-  .title { font-size: 13pt; font-weight: 900; }
-  .sub { font-size: 8.5pt; color: #444; }
-  .divider { border-top: 1px dashed #000; margin: 4px 0; }
-  .row { display: flex; justify-content: space-between; margin: 2px 0; font-size: 9pt; }
-  .total { font-size: 11pt; font-weight: 900; border-top: 2px solid #000; border-bottom: 2px solid #000; padding: 3px 0; margin: 4px 0; }
-  .footer { font-size: 8pt; text-align: center; margin-top: 8px; color: #555; }
+  @page { size: 80mm auto; margin: 4mm 5mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 9pt; color: #111; background: #fff; width: 80mm; }
+
+  /* ── Header ─────────────────────────────── */
+  .header { text-align: center; padding-bottom: 6px; }
+  .hospital-name { font-size: 15pt; font-weight: 900; letter-spacing: 1px; color: #000; }
+  .hospital-tagline { font-size: 7.5pt; color: #555; margin-top: 1px; }
+  .hospital-contact { font-size: 7pt; color: #777; margin-top: 2px; }
+  .receipt-title { font-size: 8.5pt; font-weight: 700; background: #111; color: #fff; text-align: center; padding: 3px 0; margin: 5px 0; letter-spacing: 1px; text-transform: uppercase; }
+
+  /* ── Body rows ───────────────────────────── */
+  .section { margin: 4px 0; }
+  .section-title { font-size: 7pt; font-weight: 700; text-transform: uppercase; color: #555; letter-spacing: 0.5px; border-bottom: 1px solid #ccc; padding-bottom: 2px; margin-bottom: 3px; }
+  .row { display: flex; justify-content: space-between; align-items: flex-start; margin: 2.5px 0; font-size: 8.5pt; }
+  .row .label { color: #555; flex-shrink: 0; margin-right: 4px; }
+  .row .value { font-weight: 700; text-align: right; color: #111; }
+  .row .value.mono { font-family: 'Courier New', monospace; }
+
+  /* ── Fee box ─────────────────────────────── */
+  .fee-box { border: 2px solid #111; border-radius: 4px; padding: 5px 7px; margin: 7px 0; }
+  .fee-label { font-size: 8pt; color: #555; }
+  .fee-amount { font-size: 14pt; font-weight: 900; color: #000; text-align: right; line-height: 1.1; }
+  .fee-method { font-size: 7.5pt; color: #444; text-align: right; }
+
+  /* ── Status badge ────────────────────────── */
+  .badge { display: inline-block; font-size: 7.5pt; font-weight: 700; padding: 1.5px 6px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
+  .badge-opd   { background: #dbeafe; color: #1d4ed8; }
+  .badge-lab   { background: #dcfce7; color: #15803d; }
+  .badge-us    { background: #ede9fe; color: #6d28d9; }
+  .badge-ot    { background: #fee2e2; color: #b91c1c; }
+
+  /* ── Dividers ────────────────────────────── */
+  .dash { border-top: 1px dashed #aaa; margin: 5px 0; }
+  .solid { border-top: 2px solid #111; margin: 5px 0; }
+
+  /* ── Footer ──────────────────────────────── */
+  .footer { text-align: center; font-size: 7.5pt; color: #666; margin-top: 8px; line-height: 1.6; }
+  .footer strong { color: #111; }
 </style></head>
 <body>
-  <div class="center">
-    <div class="title">BILAL HOSPITAL</div>
-    <div class="sub">Official Payment &amp; Admission Slip</div>
+
+  <!-- HEADER -->
+  <div class="header">
+    <div class="hospital-name">BILAL HOSPITAL</div>
+    <div class="hospital-tagline">Your Health, Our Priority</div>
+    <div class="hospital-contact">Consultation • Surgery • Lab • Ultrasound</div>
   </div>
-  <div class="divider"></div>
-  <div class="row"><span>Slip No:</span><span><strong>${r.visitNumber}</strong></span></div>
-  <div class="row"><span>MR Number:</span><span><strong>${r.mrNumber}</strong></span></div>
-  <div class="row"><span>Patient Name:</span><span><strong>${r.patientName}</strong></span></div>
-  <div class="row"><span>Destination:</span><span>${r.destinationType || "OPD"}</span></div>
-  <div class="row"><span>Doctor / Consultant:</span><span>${r.consultantName || "-"}</span></div>
-  <div class="row"><span>Date:</span><span>${r.visitDate || new Date().toLocaleDateString()}</span></div>
-  <div class="divider"></div>
-  <div class="total row"><span>Fee Received (${r.paymentMethod || "CASH"}):</span><span>Rs. ${r.amountReceived}</span></div>
-  <div class="footer">Thank you for choosing Bilal Hospital<br/>Get well soon!</div>
-<script>window.onload=function(){setTimeout(function(){window.print();window.close();},300);};<\/script>
+
+  <div class="receipt-title">Official Payment Receipt</div>
+
+  <!-- RECEIPT META -->
+  <div class="section">
+    <div class="row">
+      <span class="label">Receipt No:</span>
+      <span class="value mono">${r.visitNumber}</span>
+    </div>
+    <div class="row">
+      <span class="label">Date:</span>
+      <span class="value mono">${dateStr}</span>
+    </div>
+    <div class="row">
+      <span class="label">Time:</span>
+      <span class="value mono">${r.arrivalTime || timeStr}</span>
+    </div>
+  </div>
+
+  <div class="dash"></div>
+
+  <!-- PATIENT INFO -->
+  <div class="section">
+    <div class="section-title">Patient Information</div>
+    <div class="row">
+      <span class="label">MR Number:</span>
+      <span class="value mono">${r.mrNumber}</span>
+    </div>
+    <div class="row">
+      <span class="label">Patient Name:</span>
+      <span class="value">${r.patientName}</span>
+    </div>
+    ${extraInfo?.fatherName ? `<div class="row"><span class="label">Father / Husband:</span><span class="value">${extraInfo.fatherName}</span></div>` : ""}
+    ${(extraInfo?.age || extraInfo?.gender) ? `<div class="row"><span class="label">Age / Gender:</span><span class="value">${extraInfo?.age || "-"} yrs / ${extraInfo?.gender || "-"}</span></div>` : ""}
+    ${extraInfo?.phone ? `<div class="row"><span class="label">Phone:</span><span class="value mono">${extraInfo.phone}</span></div>` : ""}
+  </div>
+
+  <div class="dash"></div>
+
+  <!-- VISIT DETAILS -->
+  <div class="section">
+    <div class="section-title">Visit Details</div>
+    <div class="row">
+      <span class="label">Service Type:</span>
+      <span class="value">
+        <span class="badge ${
+          (r.destinationType || "OPD") === "LAB" ? "badge-lab"
+          : (r.destinationType || "OPD") === "ULTRASOUND" ? "badge-us"
+          : (r.destinationType || "OPD") === "OT" ? "badge-ot"
+          : "badge-opd"
+        }">${r.destinationType || "OPD"}</span>
+      </span>
+    </div>
+    <div class="row">
+      <span class="label">Consultant / Doctor:</span>
+      <span class="value">${r.consultantName || "-"}</span>
+    </div>
+    <div class="row">
+      <span class="label">Department:</span>
+      <span class="value">${r.department || "OPD"}</span>
+    </div>
+    ${r.reasonForVisit ? `<div class="row"><span class="label">Reason / Tests:</span><span class="value">${r.reasonForVisit}</span></div>` : ""}
+  </div>
+
+  <div class="solid"></div>
+
+  <!-- FEE BOX -->
+  <div class="fee-box">
+    <div class="fee-label">Total Fee Collected</div>
+    <div class="fee-amount">Rs. ${(r.amountReceived || 0).toLocaleString()}</div>
+    <div class="fee-method">Payment: ${r.paymentMethod || "CASH"} &nbsp;|&nbsp; Status: PAID ✓</div>
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <strong>Thank you for choosing Bilal Hospital</strong><br/>
+    Get well soon! May Allah grant you speedy recovery.<br/>
+    ─────────────────────<br/>
+    This is a computer-generated receipt.<br/>
+    No signature required.
+  </div>
+
+<script>window.onload=function(){setTimeout(function(){window.print();window.close();},350);};<\/script>
 </body></html>`);
     win.document.close();
     setPrintedReceipt(null);
@@ -452,7 +559,12 @@ export const ReceptionistPortal: React.FC<ReceptionistPortalProps> = ({
 
     setLastDirectVisit(newVisit);
     setDirectEncounterSubmitted(true);
-    printReceiptDirect(newVisit);
+    printReceiptDirect(newVisit, {
+      fatherName: directEncounterFatherName.trim() || undefined,
+      age: directEncounterAge || undefined,
+      gender: directEncounterGender || undefined,
+      phone: directEncounterPhone.trim() || undefined,
+    });
 
     // Reset form
     setDirectEncounterName("");

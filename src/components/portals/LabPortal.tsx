@@ -488,7 +488,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       };
       const reportSheets = selectedOrderForResult.tests.map((test) => {
         const template = getTemplateByCode(test) || DEFAULT_LAB_TEMPLATES[0];
-        return handleGeneratePrintHtml(finalOrderForPrint, template.code, testResults[template.code] || {});
+        return handleGeneratePrintHtml(finalOrderForPrint, template.code, testResults[template.code] || {}, testRemarks[template.code]);
       });
       openDirectPrintWindow(reportSheets);
     }
@@ -502,18 +502,29 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   const handleGeneratePrintHtml = (
     order: LabOrderRecord,
     requestedTestCode?: string,
-    enteredResults?: Record<string, string>
+    enteredResults?: Record<string, string>,
+    enteredRemarks?: string
   ): string => {
     const testCode = requestedTestCode || (order.tests && order.tests[0] ? order.tests[0] : "CBC");
     const tmpl = getTemplateByCode(testCode) || DEFAULT_LAB_TEMPLATES[0];
 
     let resultsObj: Record<string, string> = enteredResults || {};
+    let reportRemarks = enteredRemarks || "";
     if (!enteredResults) {
       try {
-        const parsed = order.resultsV1 ? JSON.parse(order.resultsV1) : {};
-        resultsObj = parsed.__labTests?.[tmpl.code]?.results || parsed.__labTests?.[testCode]?.results || parsed.__labTests?.[tmpl.code] || parsed.__labTests?.[testCode] || parsed;
+        const reportText = order.resultsV2 || order.resultsV1;
+        const parsed = reportText ? JSON.parse(reportText) : {};
+        const testResult = parsed.__labTests?.[tmpl.code] || parsed.__labTests?.[testCode];
+        if (testResult && typeof testResult === "object" && !Array.isArray(testResult)) {
+          resultsObj = testResult.results && typeof testResult.results === "object"
+            ? testResult.results
+            : testResult;
+          reportRemarks = testResult.remarks || reportRemarks;
+        } else {
+          resultsObj = parsed;
+        }
       } catch {
-        resultsObj = { notes: order.resultsV1 || "" };
+        resultsObj = { notes: order.resultsV2 || order.resultsV1 || "" };
       }
     }
 
@@ -536,6 +547,7 @@ export const LabPortal: React.FC<LabPortalProps> = ({
       technicianName: "Lab Technologist",
       template: tmpl,
       evaluatedResults: evaluated,
+      remarks: reportRemarks,
       versionNumber: order.currentVersion || 1,
     });
   };
@@ -1757,7 +1769,11 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <td className="py-3 px-4 text-right space-x-1.5">
                           {(order.status === "ACCEPTED" || order.status === "SUBMITTED_TO_CONSULTANT" || order.resultsV1) ? (
                             <button
-                              onClick={() => openDirectPrintWindow(handleGeneratePrintHtml(order))}
+                              onClick={() => {
+                                const testsToPrint = order.tests.length > 0 ? order.tests : ["CBC"];
+                                const reportSheets = testsToPrint.map((test) => handleGeneratePrintHtml(order, test));
+                                openDirectPrintWindow(reportSheets);
+                              }}
                               className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
                             >
                               <Printer className="w-3.5 h-3.5" /> Print PDF

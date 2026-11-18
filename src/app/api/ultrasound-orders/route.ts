@@ -52,7 +52,7 @@ export async function GET(req: Request) {
             },
             {
               status: {
-                in: ["ORDERED", "IN_PROGRESS", "SUBMITTED_TO_CONSULTANT"],
+                in: ["ORDERED", "PROCESSING", "REVISION_REQUESTED", "SUBMITTED_TO_CONSULTANT"],
               },
             },
           ],
@@ -104,6 +104,7 @@ export async function POST(req: Request) {
       visitId: body.visitId || "",
       consultantId: body.consultantId || "",
       consultantName: body.consultantName || "Doctor",
+      templateCode: body.templateCode || null,
       requestedExam: body.scanType || body.requestedExam,
       clinicalIndication: body.clinicalIndication || "",
       priority: body.priority === "URGENT" ? "URGENT" : "NORMAL",
@@ -113,19 +114,23 @@ export async function POST(req: Request) {
     });
 
     if (fee > 0) {
-      await cashRepository.createTransaction({
-        transactionNumber: `TXN-US-${Date.now().toString().slice(-6)}`,
-        transactionType: "INCOME",
-        category: "ULTRASOUND_SCAN",
-        department: "Ultrasound Department",
-        amount: fee,
-        paymentMethod: body.paymentMethod || "CASH",
-        description: `Ultrasound scan fee for ${body.scanType || body.requestedExam}`,
-        patientId: newOrder.patientId,
-        visitId: newOrder.visitId,
-        createdById: newOrder.consultantId,
-        transactionDate: new Date(),
-      });
+      try {
+        await cashRepository.createTransaction({
+          transactionNumber: `TXN-US-${Date.now().toString().slice(-6)}`,
+          transactionType: "INCOME",
+          category: "ULTRASOUND_SCAN",
+          department: "Ultrasound Department",
+          amount: fee,
+          paymentMethod: body.paymentMethod || "CASH",
+          description: `Ultrasound scan fee for ${body.scanType || body.requestedExam}`,
+          patientId: newOrder.patientId,
+          visitId: newOrder.visitId || null,
+          createdById: newOrder.consultantId || "",
+          transactionDate: new Date(),
+        });
+      } catch (cashErr: any) {
+        console.warn("[Ultrasound Orders POST] Cash transaction failed (non-fatal):", cashErr?.message);
+      }
     }
 
     return NextResponse.json(
@@ -148,7 +153,7 @@ export async function POST(req: Request) {
 export async function PUT(req: Request) {
   try {
     const body = await req.json();
-    const { id, action, findings, status, pdfFileName, imageBase64 } = body;
+    const { id, action, findings, impression, status, pdfFileName, imageBase64, revisionReason, revisionComment } = body;
 
     if (!id) {
       return NextResponse.json({ error: "Ultrasound Order ID is required." }, { status: 400 });
@@ -159,14 +164,27 @@ export async function PUT(req: Request) {
       const fields: Record<string, any> = {
         status: "SUBMITTED_TO_CONSULTANT",
         findingsV1: findings || "Scan performed",
+        impressionV1: impression || "",
         attachedFileName: pdfFileName || "ULTRASOUND_SCAN.pdf",
       };
       if (imageBase64) {
         fields.attachedImageBase64 = imageBase64;
       }
       updatedOrder = await ultrasoundRepository.updateOrderFields(id, fields);
+    } else if (action === "REVISE") {
+      updatedOrder = await ultrasoundRepository.updateOrderFields(id, {
+        status: "REVISION_REQUESTED",
+        revisionReason: revisionReason || "Review requested",
+        revisionComment: revisionComment || "",
+      });
+    } else if (action === "ACCEPT") {
+      updatedOrder = await ultrasoundRepository.updateOrderStatus(id, "ACCEPTED");
     } else if (status) {
       updatedOrder = await ultrasoundRepository.updateOrderStatus(id, status);
+    }
+
+    if (!updatedOrder) {
+      return NextResponse.json({ error: "Ultrasound order was not found." }, { status: 404 });
     }
 
     return NextResponse.json(

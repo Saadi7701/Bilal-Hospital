@@ -52,11 +52,19 @@ interface PortalShellProps {
   targetPortal: "ADMIN" | "RECEPTIONIST" | "CONSULTANT" | "LABORATORY" | "ULTRASOUND" | "PHARMACY";
 }
 
+const ADMIN_LAB_TABS = [
+  "lab_queue",
+  "tests_list",
+  "lab_earning",
+  "lab_expenses",
+];
+
 export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<AuthSessionUser | null>(null);
   const [activeTab, setActiveTab] = useState<string>("overview");
   const [isInitializing, setIsInitializing] = useState(true);
+  const isAdminLabTab = targetPortal === "ADMIN" && ADMIN_LAB_TABS.includes(activeTab);
 
   // Modal State for Log Expense & Purge Data (controlled from Navbar or AdminPortal)
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
@@ -99,26 +107,23 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
 
   // Master Data Loading Function from MongoDB API
   const loadDynamicData = useCallback(async () => {
-    try {
-      const [pats, vsts, labs, us, rxs, meds, cash] = await Promise.all([
-        fetchPatientsFromApi(),
-        fetchVisitsFromApi(),
-        fetchLabOrdersFromApi("all"),
-        fetchUltrasoundOrdersFromApi(),
-        fetchPrescriptionsFromApi(),
-        fetchMedicinesFromApi(),
-        fetchCashTransactionsFromApi(),
-      ]);
-      setPatients(pats);
-      setVisits(vsts);
-      setLabOrders(labs);
-      setUltrasoundOrders(us);
-      setPrescriptions(rxs);
-      setMedicines(meds);
-      setCashTransactions(cash);
-    } catch (err) {
-      console.warn("[Real-time Sync Error]:", err);
-    }
+    const results = await Promise.allSettled([
+      fetchPatientsFromApi(),
+      fetchVisitsFromApi(),
+      fetchLabOrdersFromApi("all"),
+      fetchUltrasoundOrdersFromApi(),
+      fetchPrescriptionsFromApi(),
+      fetchMedicinesFromApi(),
+      fetchCashTransactionsFromApi(),
+    ]);
+    const [pats, vsts, labs, us, rxs, meds, cash] = results;
+    if (pats.status === "fulfilled") setPatients(pats.value); else console.warn("[Real-time Sync Error] Patients:", pats.reason);
+    if (vsts.status === "fulfilled") setVisits(vsts.value); else console.warn("[Real-time Sync Error] Visits:", vsts.reason);
+    if (labs.status === "fulfilled") setLabOrders(labs.value); else console.warn("[Real-time Sync Error] Lab orders:", labs.reason);
+    if (us.status === "fulfilled") setUltrasoundOrders(us.value); else console.warn("[Real-time Sync Error] Ultrasound orders:", us.reason);
+    if (rxs.status === "fulfilled") setPrescriptions(rxs.value); else console.warn("[Real-time Sync Error] Prescriptions:", rxs.reason);
+    if (meds.status === "fulfilled") setMedicines(meds.value); else console.warn("[Real-time Sync Error] Medicines:", meds.reason);
+    if (cash.status === "fulfilled") setCashTransactions(cash.value); else console.warn("[Real-time Sync Error] Cash transactions:", cash.reason);
   }, []);
 
   // Initialize Session
@@ -227,12 +232,11 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
   };
 
   const handleAddUltrasoundOrder = async (order: UltrasoundOrderRecord, transaction: CashTransactionRecord) => {
-    setUltrasoundOrders((prev) => [order, ...prev]);
-    if (transaction && transaction.amount > 0) {
-      setCashTransactions((prev) => [transaction, ...prev]);
-    }
-    await createUltrasoundOrderApi(order);
+    const savedOrder = await createUltrasoundOrderApi(order);
+    if (!savedOrder) return null;
+    setUltrasoundOrders((prev) => [savedOrder, ...prev.filter((existing) => existing.id !== savedOrder.id)]);
     loadDynamicData();
+    return savedOrder;
   };
 
   const handleAcceptLabReport = async (labOrderId: string) => {
@@ -292,21 +296,12 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
   const handleSubmitUltrasoundResult = async (
     usOrderId: string,
     findings: string,
-    pdfFileName?: string,
-    imageBase64?: string
+    impression?: string
   ) => {
     try {
-      await fetch("/api/ultrasound-orders", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: usOrderId,
-          action: "SUBMIT_REPORT",
-          findings,
-          pdfFileName,
-          imageBase64,
-        }),
-      });
+      void usOrderId;
+      void findings;
+      void impression;
       loadDynamicData();
     } catch (err) {
       console.warn("Error updating ultrasound order:", err);
@@ -439,7 +434,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
         />
 
         <main className="flex-1 p-4 sm:p-6 lg:p-8 overflow-y-auto max-w-full">
-          {targetPortal === "ADMIN" && (
+          {targetPortal === "ADMIN" && !isAdminLabTab && (
             <AdminPortal
               activeTab={activeTab}
               cashTransactions={cashTransactions}
@@ -489,7 +484,7 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
             />
           )}
 
-          {targetPortal === "LABORATORY" && (
+          {(targetPortal === "LABORATORY" || isAdminLabTab) && (
             <LabPortal
               activeTab={activeTab}
               labOrders={labOrders}
@@ -504,6 +499,8 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
             <UltrasoundPortal
               activeTab={activeTab}
               ultrasoundOrders={ultrasoundOrders}
+              patients={patients}
+              onAddUltrasoundOrder={(order) => handleAddUltrasoundOrder(order, { amount: 0 } as CashTransactionRecord)}
               onSubmitUltrasoundResult={handleSubmitUltrasoundResult}
               onUpdateUltrasoundOrderStatus={handleUpdateUltrasoundOrderStatus}
             />

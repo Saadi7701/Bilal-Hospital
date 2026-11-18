@@ -349,11 +349,12 @@ model UltrasoundOrder {
   patient             Patient  @relation(fields: [patientId], references: [id])
   patientName         String?
   mrNumber            String?
-  visitId             String
-  visit               PatientVisit @relation(fields: [visitId], references: [id])
-  consultantId        String
-  consultant          Consultant @relation(fields: [consultantId], references: [id])
+  visitId             String?
+  visit               PatientVisit? @relation(fields: [visitId], references: [id])
+  consultantId        String?
+  consultant          Consultant? @relation(fields: [consultantId], references: [id])
   consultantName      String?
+  templateCode        String?
   requestedExam       String
   clinicalIndication  String?
   priority            String   @default("NORMAL")
@@ -365,11 +366,29 @@ model UltrasoundOrder {
   attachedImageUrl    String?
   attachedImageBase64 String?
   findingsV1          String?
+  findingsV2          String?
+  impressionV1        String?
+  impressionV2        String?
+  currentVersion      Int      @default(1)
+  revisionReason      String?
+  revisionComment     String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 
   reports   UltrasoundReport[]
   revisions UltrasoundRevisionRequest[]
+}
+
+model UltrasoundTemplate {
+  code           String   @id
+  name           String
+  category       String   @default("General")
+  sourceFileName String?
+  description    String?
+  sections       String
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model UltrasoundReport {

@@ -3,27 +3,29 @@ import { prisma } from "../lib/prisma";
 export class UltrasoundRepository {
   async createOrder(orderData: any): Promise<any> {
     let patientId = orderData.patientId ? orderData.patientId.toString() : "";
-    let visitId = orderData.visitId ? orderData.visitId.toString() : "";
-    let consultantId = orderData.consultantId ? orderData.consultantId.toString() : "";
+    let visitId: string | null = orderData.visitId ? orderData.visitId.toString() : null;
+    let consultantId: string | null = orderData.consultantId ? orderData.consultantId.toString() : null;
 
     const patientObj = await prisma.patient.findFirst({
       where: { OR: [{ id: patientId }, { legacyId: patientId }, { mrNumber: orderData.mrNumber || patientId }] },
     });
-    if (patientObj) patientId = patientObj.id;
+    if (!patientObj) {
+      throw new Error(`Patient not found for id="${patientId}" / MRN="${orderData.mrNumber || ""}". Register the patient first.`);
+    }
+    patientId = patientObj.id;
 
-    const visitObj = await prisma.patientVisit.findFirst({
-      where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
-    });
-    if (visitObj) visitId = visitObj.id;
+    if (visitId) {
+      const visitObj = await prisma.patientVisit.findFirst({
+        where: { OR: [{ id: visitId }, { legacyId: visitId }, { visitNumber: visitId }] },
+      });
+      visitId = visitObj?.id || null;
+    }
 
-    const consultantObj = await prisma.consultant.findFirst({
-      where: { OR: [{ id: consultantId }, { legacyId: consultantId }] },
-    });
-    if (consultantObj) {
-      consultantId = consultantObj.id;
-    } else {
-      const anyConsultant = await prisma.consultant.findFirst();
-      if (anyConsultant) consultantId = anyConsultant.id;
+    if (consultantId) {
+      const consultantObj = await prisma.consultant.findFirst({
+        where: { OR: [{ id: consultantId }, { legacyId: consultantId }] },
+      });
+      consultantId = consultantObj?.id || null;
     }
 
     let finalOrderNumber = (orderData.orderNumber || "").trim();
@@ -44,9 +46,10 @@ export class UltrasoundRepository {
         patientId,
         patientName: orderData.patientName || (patientObj ? patientObj.fullName : "Patient"),
         mrNumber: orderData.mrNumber || (patientObj ? patientObj.mrNumber : "MR-0000"),
-        visitId,
-        consultantId,
+        ...(visitId ? { visitId } : {}),
+        ...(consultantId ? { consultantId } : {}),
         consultantName: orderData.consultantName || "Doctor",
+        templateCode: orderData.templateCode || null,
         requestedExam: orderData.requestedExam || orderData.scanType || "Ultrasound Scan",
         clinicalIndication: orderData.clinicalIndication || null,
         priority: orderData.priority || "NORMAL",

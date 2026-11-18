@@ -151,12 +151,11 @@ export async function createVisitApi(visit: VisitRecord): Promise<boolean> {
 }
 
 export async function fetchLabOrdersFromApi(period: string = "all"): Promise<LabOrderRecord[]> {
-  try {
-    const res = await fetch(`/api/lab-orders?period=${period}`);
-    if (!res.ok) throw new Error(`API returned status ${res.status}`);
-    const data = await res.json();
-    if (data.labOrders && Array.isArray(data.labOrders)) {
-      return data.labOrders.map((l: any) => ({
+  const res = await fetch(`/api/lab-orders?period=${period}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`Lab orders API returned status ${res.status}`);
+  const data = await res.json();
+  if (Array.isArray(data.labOrders)) {
+    return data.labOrders.map((l: any) => ({
         id: l._id || l.id,
         orderNumber: l.orderNumber || l.labOrderNumber || `LAB-${l._id}`,
         patientId: l.patientId,
@@ -183,13 +182,9 @@ export async function fetchLabOrdersFromApi(period: string = "all"): Promise<Lab
         attachedPdfName: l.attachedPdfName,
         attachedPdfUrl: l.attachedPdfUrl,
         attachedImageBase64: l.attachedImageBase64,
-      }));
-    }
-    return [];
-  } catch (err: any) {
-    console.warn("[API Client] Error fetching lab orders:", err.message);
-    return [];
+    }));
   }
+  throw new Error("Lab orders API response did not contain a labOrders array.");
 }
 
 export async function createLabOrderApi(order: LabOrderRecord): Promise<LabOrderRecord | null> {
@@ -254,7 +249,7 @@ export async function createLabOrderApi(order: LabOrderRecord): Promise<LabOrder
 
 export async function fetchUltrasoundOrdersFromApi(): Promise<UltrasoundOrderRecord[]> {
   try {
-    const res = await fetch("/api/ultrasound-orders");
+    const res = await fetch("/api/ultrasound-orders?period=all", { cache: "no-store" });
     if (!res.ok) throw new Error(`API returned status ${res.status}`);
     const data = await res.json();
     if (data.ultrasoundOrders && Array.isArray(data.ultrasoundOrders)) {
@@ -267,6 +262,7 @@ export async function fetchUltrasoundOrdersFromApi(): Promise<UltrasoundOrderRec
         visitId: u.visitId || "",
         consultantId: u.consultantId || "",
         consultantName: u.consultantName || "Doctor",
+        templateCode: u.templateCode || "",
         requestedExam: u.requestedExam || u.scanType || "Ultrasound Scan",
         clinicalIndication: u.clinicalIndication || "",
         totalFee: u.totalFee || u.fee || 0,
@@ -276,6 +272,13 @@ export async function fetchUltrasoundOrdersFromApi(): Promise<UltrasoundOrderRec
           : new Date().toISOString().split("T")[0],
         currentVersion: u.currentVersion || 1,
         findingsV1: u.findingsV1,
+        findingsV2: u.findingsV2,
+        impressionV1: u.impressionV1,
+        impressionV2: u.impressionV2,
+        revisionReason: u.revisionReason,
+        revisionComment: u.revisionComment,
+        createdAt: u.createdAt || u.requestDate,
+        attachedPdfName: u.attachedFileName || "",
         attachedFileName: u.attachedFileName,
         attachedPdfUrl: u.attachedPdfUrl,
         attachedImageUrl: u.attachedImageUrl,
@@ -289,7 +292,7 @@ export async function fetchUltrasoundOrdersFromApi(): Promise<UltrasoundOrderRec
   }
 }
 
-export async function createUltrasoundOrderApi(order: UltrasoundOrderRecord): Promise<boolean> {
+export async function createUltrasoundOrderApi(order: UltrasoundOrderRecord): Promise<UltrasoundOrderRecord | null> {
   try {
     const res = await fetch("/api/ultrasound-orders", {
       method: "POST",
@@ -300,6 +303,7 @@ export async function createUltrasoundOrderApi(order: UltrasoundOrderRecord): Pr
         mrNumber: order.mrNumber,
         visitId: order.visitId,
         consultantId: order.consultantId,
+        templateCode: order.templateCode,
         consultantName: order.consultantName,
         scanType: order.requestedExam,
         clinicalIndication: order.clinicalIndication || "",
@@ -311,12 +315,29 @@ export async function createUltrasoundOrderApi(order: UltrasoundOrderRecord): Pr
     const data = await res.json();
     if (!res.ok) {
       console.error("[API Client Error] Ultrasound order failed:", data.error);
-      return false;
+      if (typeof window !== "undefined") alert(data.error || "Failed to save ultrasound order.");
+      return null;
     }
-    return true;
+    const savedOrder = data.ultrasoundOrder;
+    if (!savedOrder) return null;
+    return {
+      ...order,
+      id: savedOrder.id || savedOrder._id,
+      orderNumber: savedOrder.orderNumber || order.orderNumber,
+      patientId: savedOrder.patientId || order.patientId,
+      visitId: savedOrder.visitId || "",
+      consultantId: savedOrder.consultantId || "",
+      templateCode: savedOrder.templateCode || order.templateCode,
+      requestedExam: savedOrder.requestedExam || order.requestedExam,
+      totalFee: Number(savedOrder.totalFee ?? order.totalFee),
+      status: savedOrder.status || order.status,
+      currentVersion: savedOrder.currentVersion || 1,
+      requestDate: savedOrder.requestDate ? toPKTDateString(savedOrder.requestDate) : order.requestDate,
+      createdAt: savedOrder.createdAt || savedOrder.requestDate || order.createdAt,
+    };
   } catch (err: any) {
     console.error("[API Client Error] Ultrasound order exception:", err.message);
-    return false;
+    return null;
   }
 }
 

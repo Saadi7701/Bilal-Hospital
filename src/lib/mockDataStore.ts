@@ -175,6 +175,7 @@ export interface UltrasoundOrderRecord {
   visitId: string;
   consultantId: string;
   consultantName: string;
+  templateCode?: string;
   requestedExam: string;
   clinicalIndication: string;
   totalFee: number;
@@ -192,11 +193,17 @@ export interface UltrasoundOrderRecord {
   findingsV2?: string;
   impressionV2?: string;
   revisionReason?: string;
+  revisionComment?: string;
+  cnic?: string;
+  age?: number;
+  gender?: string;
+  createdAt?: string;
 
   // File Upload Fields for Consultant Easy View
   attachedPdfUrl?: string;
   attachedImageUrl?: string;
   attachedFileName?: string;
+  attachedPdfName?: string;
   attachedImageBase64?: string;
 }
 

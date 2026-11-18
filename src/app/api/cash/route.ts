@@ -10,6 +10,7 @@ export async function GET(req: Request) {
     const { searchParams } = new URL(req.url);
     const period = searchParams.get("period") || "today"; // 'today' | 'month' | 'all'
     const dateParam = searchParams.get("date");
+    const department = searchParams.get("department")?.trim();
 
     const pktDateRange = getPKTDateRange(dateParam);
     const pktMonthRange = getPKTMonthRange(dateParam);
@@ -30,11 +31,14 @@ export async function GET(req: Request) {
         },
       };
     }
+    if (department) {
+      whereClause.department = { equals: department, mode: "insensitive" };
+    }
 
     const records = await prisma.cashTransaction.findMany({
       where: whereClause,
       orderBy: { transactionDate: "desc" },
-      take: period === "all" || !period ? 500 : undefined,
+      take: (period === "all" || !period) && !department ? 500 : undefined,
       include: { patient: { select: { fullName: true, mrNumber: true } } },
     });
     const transactions = records.map((t) => ({

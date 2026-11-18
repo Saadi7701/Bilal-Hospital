@@ -93,6 +93,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           { id: "us_queue", label: "Ultrasound Requests", icon: Radio },
           { id: "findings_entry", label: "Ultrasound Findings", icon: FileText },
           { id: "us_revisions", label: "Revision Requests", icon: AlertTriangle },
+          { id: "us_finance", label: "Daily Cash & Expenses", icon: DollarSign },
         ];
       case "PHARMACY":
         return [

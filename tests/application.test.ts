@@ -21,6 +21,9 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
   console.log("=================================================");
 
   const results: ITestResult[] = [];
+  let testAdminId = "";
+  let testPatient: any;
+  let testVisit: any;
 
   const assert = async (suite: string, testName: string, fn: () => Promise<void>) => {
     try {
@@ -44,6 +47,7 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
       role: "ADMIN",
       isActive: true,
     });
+    testAdminId = user._id;
     if (!user._id) throw new Error("User _id was not generated.");
 
     const found = await userRepository.findByUsername(testUsername);
@@ -54,22 +58,22 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
 
   // 2. Patient Registration & Search Tests
   await assert("Patients", "Patient registration & multi-field search", async () => {
-    const mrNum = `MR-TEST-${Date.now()}`;
+    const patientName = `Test Patient ${Date.now()}`;
     const patient = await patientRepository.createPatient({
-      mrNumber: mrNum,
-      fullName: "Zainab Fatima",
+      fullName: patientName,
       gender: "Female",
       age: 29,
       phone: "03009998877",
-      createdBy: "000000000000000000000000" as any,
+      createdBy: testAdminId,
     });
+    testPatient = patient;
 
     if (!patient._id) throw new Error("Patient _id was not generated.");
 
-    const foundByMr = await patientRepository.findByMrNumber(mrNum);
+    const foundByMr = await patientRepository.findByMrNumber(patient.mrNumber);
     if (!foundByMr) throw new Error("Patient not found by MR number.");
 
-    const searchResults = await patientRepository.searchPatients("Zainab");
+    const searchResults = await patientRepository.searchPatients(patientName);
     if (searchResults.length === 0) throw new Error("Patient search returned zero results.");
 
     await validatePatientExists(patient._id.toString());
@@ -80,15 +84,16 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
     const visitNum = `VIS-TEST-${Date.now()}`;
     const visit = await visitRepository.createVisit({
       visitNumber: visitNum,
-      patientId: "000000000000000000000001" as any,
-      consultantId: "000000000000000000000002" as any,
+      patientId: testPatient._id,
+      consultantId: "",
       department: "Cardiology",
       consultationFee: 2000,
       amountReceived: 2000,
       paymentMethod: "CASH",
-      receptionistId: "000000000000000000000003" as any,
+      receptionistId: testAdminId,
       status: "REGISTERED",
     });
+    testVisit = visit;
 
     if (!visit._id) throw new Error("Visit _id was not generated.");
 
@@ -103,9 +108,9 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
   // 4. Digital Prescription Tests
   await assert("Prescriptions", "Issuing prescription with embedded line items", async () => {
     const rx = await prescriptionRepository.createPrescription({
-      patientId: "000000000000000000000001" as any,
-      visitId: "000000000000000000000004" as any,
-      consultantId: "000000000000000000000002" as any,
+      patientId: testPatient._id,
+      visitId: testVisit._id,
+      consultantId: testVisit.consultantId,
       diagnosis: "Essential Hypertension",
       isDispensed: false,
       items: [
@@ -128,9 +133,9 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
     const orderNum = `LAB-TEST-${Date.now()}`;
     const order = await labRepository.createLabOrder({
       orderNumber: orderNum,
-      patientId: "000000000000000000000001" as any,
-      visitId: "000000000000000000000004" as any,
-      consultantId: "000000000000000000000002" as any,
+      patientId: testPatient._id,
+      visitId: testVisit._id,
+      consultantId: testVisit.consultantId,
       testCategory: "Haematology",
       priority: "NORMAL",
       status: "ORDERED",
@@ -170,7 +175,7 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
       amount: 2500,
       paymentMethod: "CASH",
       description: "Test Cash Entry",
-      createdById: "000000000000000000000003" as any,
+      createdById: testAdminId,
       transactionDate: new Date(),
     });
 
@@ -189,5 +194,12 @@ export async function runApplicationTests(): Promise<ITestResult[]> {
 }
 
 if (require.main === module) {
-  runApplicationTests().then(() => process.exit(0));
+  runApplicationTests()
+    .then((results) => {
+      if (results.some((result) => !result.passed)) process.exitCode = 1;
+    })
+    .catch((error) => {
+      console.error("[Test Suite Error]:", error);
+      process.exitCode = 1;
+    });
 }

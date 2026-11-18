@@ -17,7 +17,7 @@
     "db:pg:verify": "tsx scripts/04-verify-post-migration.ts",
     "db:migrate": "tsx scripts/migrate-pg-to-mongo.ts",
     "db:validate": "tsx scripts/validate-migration.ts",
-    "test": "tsx tests/application.test.ts",
+    "test": "tsx tests/dateUtils.test.ts && tsx tests/adminDailyFiltering.test.ts && tsx tests/stage5PanelsFiltering.test.ts && tsx tests/fullAcceptanceSuite.test.ts && tsx tests/application.test.ts",
     "backup:run": "tsx scripts/backup-worker.ts"
   },
   "dependencies": {

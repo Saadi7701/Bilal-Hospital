@@ -299,9 +299,16 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
     impression?: string
   ) => {
     try {
-      void usOrderId;
-      void findings;
-      void impression;
+      await fetch("/api/ultrasound-orders", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: usOrderId,
+          action: "SUBMIT_REPORT",
+          findings: findings || "",
+          impression: impression || "",
+        }),
+      });
       loadDynamicData();
     } catch (err) {
       console.warn("Error updating ultrasound order:", err);

@@ -502,13 +502,6 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
                 onRefreshLabOrders={loadDynamicData}
                 isAdmin={isAdminLabTab}
               />
-              activeTab={activeTab}
-              labOrders={labOrders}
-              patients={patients}
-              onAddLabOrder={handleAddLabOrder}
-              onSubmitLabResult={handleSubmitLabResult}
-              onUpdateLabOrderStatus={handleUpdateLabOrderStatus}
-            />
           )}
 
           {targetPortal === "ULTRASOUND" && (

@@ -243,7 +243,6 @@ export class LabRepository {
 
     return { ...req, _id: req.id };
   }
-}
 
   async deleteLabOrder(id: string): Promise<any> {
     const existing = await this.findOrderById(id);
@@ -252,5 +251,6 @@ export class LabRepository {
     const deleted = await prisma.labOrder.delete({ where: { id: existing.id } });
     return { ...deleted, _id: deleted.id };
   }
+}
 
 export const labRepository = new LabRepository();

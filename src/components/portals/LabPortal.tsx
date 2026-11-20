@@ -74,37 +74,20 @@ import { createPatientApi } from "../../lib/apiClient";
     labOrders: LabOrderRecord[];
     patients?: PatientRecord[];
     onAddLabOrder?: (order: LabOrderRecord, transaction?: any) => Promise<LabOrderRecord | null> | LabOrderRecord | null;
-    onSubmitLabResult:
-      (
-        labOrderId: string,
-        resultsJson: string,
-        pdfFileName?: string,
-        isVersion2?: boolean,
-        imageBase64?: string
-      ) => void;
+    onSubmitLabResult: (
+      labOrderId: string,
+      resultsJson: string,
+      pdfFileName?: string,
+      isVersion2?: boolean,
+      imageBase64?: string
+    ) => void;
     onUpdateLabOrderStatus?: (
       labOrderId: string,
       status: LabOrderRecord["status"]
     ) => void;
     onRefreshLabOrders?: () => void;
     isAdmin?: boolean;
-
-  activeTab: string;
-  labOrders: LabOrderRecord[];
-  patients?: PatientRecord[];
-  onAddLabOrder?: (order: LabOrderRecord, transaction?: any) => Promise<LabOrderRecord | null> | LabOrderRecord | null;
-  onSubmitLabResult: (
-    labOrderId: string,
-    resultsJson: string,
-    pdfFileName?: string,
-    isVersion2?: boolean,
-    imageBase64?: string
-  ) => void;
-  onUpdateLabOrderStatus?: (
-    labOrderId: string,
-    status: LabOrderRecord["status"]
-  ) => void;
-}
+  }
 
 export const LabPortal: React.FC<LabPortalProps> = ({
   activeTab,
@@ -115,13 +98,6 @@ export const LabPortal: React.FC<LabPortalProps> = ({
   onUpdateLabOrderStatus,
   onRefreshLabOrders,
   isAdmin,
-}) => {
-  activeTab,
-  labOrders,
-  patients = [],
-  onAddLabOrder,
-  onSubmitLabResult,
-  onUpdateLabOrderStatus,
 }) => {
   // Result Entry Pop-up Modal State
   const [selectedOrderForResult, setSelectedOrderForResult] = useState<LabOrderRecord | null>(null);
@@ -1676,13 +1652,6 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                               Delete
                             </button>
                           )}
-                        </td>
-                          <button
-                            onClick={() => setSelectedOrderForResult(order)}
-                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                          >
-                            <FlaskConical className="w-3.5 h-3.5" /> Confirm MRN & Enter Results
-                          </button>
                         </td>
                       </tr>
                     ))}

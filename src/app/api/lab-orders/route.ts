@@ -205,7 +205,7 @@ export async function DELETE(req: Request) {
   }
 }
 
-(req: Request) {
+export async function PUT(req: Request) {
   try {
     const body = await req.json();
     const { id, action, resultsJson, status, revisionReason, revisionComment, pdfFileName, imageBase64, isVersion2 } = body;

@@ -69,7 +69,26 @@ import { labPdfReportGenerator } from "../../lib/pdfReportGenerator";
 import { formatPKTDateAndDay, toPKTDateString } from "../../lib/dateUtils";
 import { createPatientApi } from "../../lib/apiClient";
 
-interface LabPortalProps {
+  interface LabPortalProps {
+    activeTab: string;
+    labOrders: LabOrderRecord[];
+    patients?: PatientRecord[];
+    onAddLabOrder?: (order: LabOrderRecord, transaction?: any) => Promise<LabOrderRecord | null> | LabOrderRecord | null;
+    onSubmitLabResult:
+      (
+        labOrderId: string,
+        resultsJson: string,
+        pdfFileName?: string,
+        isVersion2?: boolean,
+        imageBase64?: string
+      ) => void;
+    onUpdateLabOrderStatus?: (
+      labOrderId: string,
+      status: LabOrderRecord["status"]
+    ) => void;
+    onRefreshLabOrders?: () => void;
+    isAdmin?: boolean;
+  } {
   activeTab: string;
   labOrders: LabOrderRecord[];
   patients?: PatientRecord[];
@@ -1625,7 +1644,30 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <td className="py-3 px-4">
                           <Badge variant={order.status === "REVISION_REQUESTED" ? "danger" : "warning"}>{order.status}</Badge>
                         </td>
-                        <td className="py-3 px-4 text-right space-x-2">
+                                                <td className="py-3 px-4 text-right space-x-2">
+                          <button
+                            onClick={() => setSelectedOrderForResult(order)}
+                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <FlaskConical className="w-3.5 h-3.5" /> Confirm MRN & Enter Results
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Delete this lab order?')) return;
+                                try {
+                                  await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
+                                  if (onRefreshLabOrders) onRefreshLabOrders();
+                                } catch (e) {
+                                  console.error(e);
+                                }
+                              }}
+                              className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs"
+                            >
+                              Delete
+                            </button>
+                          )}
+                        </td>
                           <button
                             onClick={() => setSelectedOrderForResult(order)}
                             className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"

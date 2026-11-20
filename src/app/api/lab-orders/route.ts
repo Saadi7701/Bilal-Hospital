@@ -179,7 +179,33 @@ export async function POST(req: Request) {
   }
 }
 
-export async function PUT(req: Request) {
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const id = searchParams.get('id');
+    if (!id) {
+      return NextResponse.json({ error: 'Lab order ID is required' }, { status: 400 });
+    }
+    // Verify existence
+    const existing = await prisma.labOrder.findUnique({ where: { id } });
+    if (!existing) {
+      return NextResponse.json({ error: 'Lab order not found' }, { status: 404 });
+    }
+    await prisma.labOrder.delete({ where: { id } });
+    return NextResponse.json({ message: 'Lab order deleted' }, { status: 200 });
+  } catch (error: any) {
+    console.error('[Lab Orders API DELETE Error]:', error);
+    return NextResponse.json(
+      {
+        error: `Failed to delete lab order: ${error?.message || String(error)}`,
+        details: error?.stack || error?.message || String(error),
+      },
+      { status: 500 }
+    );
+  }
+}
+
+(req: Request) {
   try {
     const body = await req.json();
     const { id, action, resultsJson, status, revisionReason, revisionComment, pdfFileName, imageBase64, isVersion2 } = body;

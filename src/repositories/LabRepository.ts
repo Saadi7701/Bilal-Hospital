@@ -245,4 +245,12 @@ export class LabRepository {
   }
 }
 
+  async deleteLabOrder(id: string): Promise<any> {
+    const existing = await this.findOrderById(id);
+    if (!existing) return null;
+    // Prisma will cascade delete related items due to schema settings
+    const deleted = await prisma.labOrder.delete({ where: { id: existing.id } });
+    return { ...deleted, _id: deleted.id };
+  }
+
 export const labRepository = new LabRepository();

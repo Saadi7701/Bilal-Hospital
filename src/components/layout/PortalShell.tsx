@@ -493,6 +493,15 @@ export const PortalShell: React.FC<PortalShellProps> = ({ targetPortal }) => {
 
           {(targetPortal === "LABORATORY" || isAdminLabTab) && (
             <LabPortal
+                activeTab={activeTab}
+                labOrders={labOrders}
+                patients={patients}
+                onAddLabOrder={handleAddLabOrder}
+                onSubmitLabResult={handleSubmitLabResult}
+                onUpdateLabOrderStatus={handleUpdateLabOrderStatus}
+                onRefreshLabOrders={loadDynamicData}
+                isAdmin={isAdminLabTab}
+              />
               activeTab={activeTab}
               labOrders={labOrders}
               patients={patients}

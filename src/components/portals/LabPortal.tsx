@@ -1629,29 +1629,31 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                         <td className="py-3 px-4">
                           <Badge variant={order.status === "REVISION_REQUESTED" ? "danger" : "warning"}>{order.status}</Badge>
                         </td>
-                                                <td className="py-3 px-4 text-right space-x-2">
-                          <button
-                            onClick={() => setSelectedOrderForResult(order)}
-                            className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                          >
-                            <FlaskConical className="w-3.5 h-3.5" /> Confirm MRN & Enter Results
-                          </button>
-                          {isAdmin && (
+                        <td className="py-3 px-4 text-right">
+                          <div className="flex items-center justify-end gap-2 flex-wrap">
                             <button
-                              onClick={async () => {
-                                if (!window.confirm('Delete this lab order?')) return;
-                                try {
-                                  await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
-                                  if (onRefreshLabOrders) onRefreshLabOrders();
-                                } catch (e) {
-                                  console.error(e);
-                                }
-                              }}
-                              className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-500 text-white text-xs"
+                              onClick={() => setSelectedOrderForResult(order)}
+                              className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
                             >
-                              Delete
+                              <FlaskConical className="w-3.5 h-3.5" /> Confirm MRN & Enter Results
                             </button>
-                          )}
+                            {isAdmin && (
+                              <button
+                                onClick={async () => {
+                                  if (!window.confirm('Delete this lab order? This cannot be undone.')) return;
+                                  try {
+                                    const res = await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
+                                    if (res.ok && onRefreshLabOrders) onRefreshLabOrders();
+                                  } catch (e) {
+                                    console.error('Delete failed:', e);
+                                  }
+                                }}
+                                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" /> Delete
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -3182,3 +3184,4 @@ export const LabPortal: React.FC<LabPortalProps> = ({
     </div>
   );
 };
+

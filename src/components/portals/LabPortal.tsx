@@ -1637,22 +1637,26 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                             >
                               <FlaskConical className="w-3.5 h-3.5" /> Confirm MRN & Enter Results
                             </button>
-                            {isAdmin && (
-                              <button
-                                onClick={async () => {
-                                  if (!window.confirm('Delete this lab order? This cannot be undone.')) return;
-                                  try {
-                                    const res = await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
-                                    if (res.ok && onRefreshLabOrders) onRefreshLabOrders();
-                                  } catch (e) {
-                                    console.error('Delete failed:', e);
+                            <button
+                              onClick={async () => {
+                                if (!window.confirm('Delete this lab order? This cannot be undone.')) return;
+                                try {
+                                  const res = await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
+                                  if (res.ok) {
+                                    if (onRefreshLabOrders) onRefreshLabOrders();
+                                    else window.location.reload();
+                                  } else {
+                                    alert('Failed to delete lab order');
                                   }
-                                }}
-                                className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" /> Delete
-                              </button>
-                            )}
+                                } catch (e) {
+                                  console.error('Delete failed:', e);
+                                  alert('Error deleting order');
+                                }
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" /> Delete
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1813,6 +1817,26 @@ export const LabPortal: React.FC<LabPortalProps> = ({
                             className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs hover:bg-slate-200"
                           >
                             Details
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!window.confirm('Delete this lab order? This cannot be undone.')) return;
+                              try {
+                                const res = await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
+                                if (res.ok) {
+                                  if (onRefreshLabOrders) onRefreshLabOrders();
+                                  else window.location.reload();
+                                } else {
+                                  alert('Failed to delete lab order');
+                                }
+                              } catch (e) {
+                                console.error('Delete failed:', e);
+                                alert('Error deleting order');
+                              }
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs inline-flex items-center gap-1 shadow-sm cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" /> Delete
                           </button>
                         </td>
                       </tr>

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { CalendarDays, Eye, FlaskConical, Printer, RefreshCw, Search, X } from "lucide-react";
+import { CalendarDays, Eye, FlaskConical, Printer, RefreshCw, Search, Trash2, X } from "lucide-react";
 import { LabOrderRecord } from "../../lib/mockDataStore";
 import { formatPKTDateAndDay, getTodayPKTString, toPKTDateString } from "../../lib/dateUtils";
 import { getTemplateByCode } from "../../lib/labTemplateRegistry";
@@ -205,9 +205,31 @@ export const AdminLabReports: React.FC<AdminLabReportsProps> = ({ labOrders }) =
                   <td className="px-4 py-3 font-mono font-bold text-amber-700 dark:text-amber-400">{order.orderNumber}</td>
                   <td className="px-4 py-3"><span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${hasResult ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400" : "bg-amber-100 text-amber-700 dark:bg-amber-950/50 dark:text-amber-400"}`}>{order.status.replaceAll("_", " ")}</span></td>
                   <td className="px-4 py-3 text-right">
-                    <button type="button" onClick={() => setSelectedOrder(order)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-[11px] font-bold text-white hover:bg-brand-500">
-                      <Eye className="h-3.5 w-3.5" /> {hasResult ? "View result" : "View order"}
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5 flex-wrap">
+                      <button type="button" onClick={() => setSelectedOrder(order)} className="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3 py-2 text-[11px] font-bold text-white hover:bg-brand-500">
+                        <Eye className="h-3.5 w-3.5" /> {hasResult ? "View result" : "View order"}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!window.confirm('Delete this lab order? This cannot be undone.')) return;
+                          try {
+                            const res = await fetch(`/api/lab-orders?id=${order.id}`, { method: 'DELETE' });
+                            if (res.ok) {
+                              void loadAllOrders();
+                            } else {
+                              alert('Failed to delete lab order');
+                            }
+                          } catch (e) {
+                            console.error('Delete failed:', e);
+                            alert('Error deleting order');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-rose-600 px-2.5 py-2 text-[11px] font-bold text-white hover:bg-rose-500 cursor-pointer"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </div>
                   </td>
                 </tr>
               );

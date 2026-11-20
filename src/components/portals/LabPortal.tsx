@@ -88,7 +88,7 @@ import { createPatientApi } from "../../lib/apiClient";
     ) => void;
     onRefreshLabOrders?: () => void;
     isAdmin?: boolean;
-  } {
+
   activeTab: string;
   labOrders: LabOrderRecord[];
   patients?: PatientRecord[];
@@ -107,6 +107,15 @@ import { createPatientApi } from "../../lib/apiClient";
 }
 
 export const LabPortal: React.FC<LabPortalProps> = ({
+  activeTab,
+  labOrders,
+  patients = [],
+  onAddLabOrder,
+  onSubmitLabResult,
+  onUpdateLabOrderStatus,
+  onRefreshLabOrders,
+  isAdmin,
+}) => {
   activeTab,
   labOrders,
   patients = [],
